@@ -200,10 +200,10 @@ function isValidEnglish(text) {
   const t = text.trim();
   // 英字の割合が60%以上
   const letters = (t.match(/[a-zA-Z]/g) || []).length;
-  if (letters / t.length < 0.6) return false;
-  // 英単語が2つ以上
+  if (letters / t.length < 0.4) return false;
+  // 英単語が1つ以上
   const words = t.split(/\s+/).filter(w => /[a-zA-Z]{2,}/.test(w));
-  return words.length >= 2;
+  return words.length >= 1;
 }
 
 async function claudeTranslate(text, key) {
@@ -429,7 +429,7 @@ async function startTranslation() {
       const { text, lang, noSpeech } = result;
 
       // 無音・拍手・音楽スキップ
-      if (noSpeech > 0.5) continue;
+      if (noSpeech > 0.8) continue;
       if (!text.trim()) continue;
       if (shouldStop) break;
 
