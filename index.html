@@ -185,6 +185,17 @@ Initiation → イニシエーション
 
 let voices = [], audioFile = null, shouldStop = false, isRunning = false;
 
+window.addEventListener('load', () => {
+  const ok = localStorage.getItem('openai_key');
+  const ck = localStorage.getItem('claude_key');
+  if (ok) document.getElementById('openaiKey').value = ok;
+  if (ck) document.getElementById('claudeKey').value = ck;
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'openaiKey') localStorage.setItem('openai_key', e.target.value);
+  if (e.target.id === 'claudeKey') localStorage.setItem('claude_key', e.target.value);
+});
+
 function toggleVis(id, btn) {
   const el = document.getElementById(id);
   el.type = el.type === 'password' ? 'text' : 'password';
