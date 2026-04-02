@@ -20,16 +20,30 @@ h1{font-size:22px;font-weight:500;text-align:center;margin-bottom:4px}
 .show-btn{font-size:11px;color:#888;background:none;border:1px solid #ddd;border-radius:6px;padding:6px 8px;cursor:pointer;white-space:nowrap}
 .show-btn:hover{background:#f0ede8}
 select{width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#f9f8f5;color:#1a1a1a}
-input[type=range]{width:100%;margin-top:6px}
-.rv{margin-left:4px;font-weight:400;color:#999}
-.file-area{border:1px dashed #ccc;border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:background .15s;margin-bottom:10px}
+input[type=range]{width:100%;margin-top:4px}
+.vol-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+.vol-row label{font-size:12px;color:#666;white-space:nowrap;min-width:90px}
+.vol-row input{flex:1}
+.vol-val{font-size:12px;color:#999;min-width:44px;text-align:right}
+.file-area{border:1px dashed #ccc;border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:background .15s;margin-bottom:10px}
 .file-area:hover{background:#f9f8f5}
 .file-area input{display:none}
-.file-area .icon{font-size:30px;margin-bottom:8px}
+.file-area .icon{font-size:28px;margin-bottom:6px}
 .file-area p{font-size:13px;color:#888}
 .file-name{font-size:12px;color:#bbb;margin-top:4px}
 .err-box{font-size:12px;color:#a00;background:#fde8e8;border:1px solid #f5b8b8;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:none}
-.big-btn{width:100%;height:50px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .15s}
+
+/* 音源プレーヤー */
+.player-wrap{background:#f9f8f5;border:1px solid #e0ddd8;border-radius:10px;padding:12px;margin-bottom:10px;display:none}
+.player-time{display:flex;justify-content:space-between;font-size:11px;color:#aaa;margin-bottom:4px}
+.seek-bar{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:#e0ddd8;border-radius:3px;outline:none;cursor:pointer;margin-bottom:8px}
+.seek-bar::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#2da87a;cursor:pointer}
+.player-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.player-controls label{font-size:12px;color:#666;white-space:nowrap}
+.player-controls input[type=range]{flex:1;min-width:80px}
+.player-controls span{font-size:12px;color:#999;white-space:nowrap}
+
+.big-btn{width:100%;height:48px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .15s}
 .big-btn:hover{background:#f5f4f0}
 .big-btn:disabled{opacity:.4;cursor:not-allowed}
 .stop-btn{background:#fde8e8;border-color:#e24b4a;color:#a00}
@@ -38,14 +52,10 @@ input[type=range]{width:100%;margin-top:6px}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 .prog-wrap{margin-bottom:12px;display:none}
 .prog-bar{height:4px;background:#e8e4dc;border-radius:2px;overflow:hidden}
-.prog-fill{height:100%;background:#2da87a;border-radius:2px;transition:width .4s}
+.prog-fill{height:100%;background:#2da87a;border-radius:2px;transition:width .3s}
 .prog-lbl{font-size:11px;color:#aaa;margin-top:4px;text-align:center}
-.vol-row{display:flex;align-items:center;gap:10px;margin-top:10px}
-.vol-row label{font-size:12px;color:#666;white-space:nowrap}
-.vol-row input{flex:1}
-.vol-val{font-size:12px;color:#999;min-width:40px}
 .sub-wrap{margin-bottom:12px}
-.sub-box{background:#fff;border:1px solid #e0ddd8;border-radius:14px;padding:22px 24px;min-height:110px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:8px}
+.sub-box{background:#fff;border:1px solid #e0ddd8;border-radius:14px;padding:20px 24px;min-height:100px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:8px}
 .sub-orig{font-size:13px;color:#bbb;line-height:1.6;width:100%}
 .sub-tl{font-size:22px;font-weight:500;color:#1a1a1a;line-height:1.55;width:100%;min-height:34px}
 .sub-tl.empty{font-size:14px;font-weight:400;color:#ccc}
@@ -53,13 +63,13 @@ input[type=range]{width:100%;margin-top:6px}
 .log-top span{font-size:11px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.07em}
 .clr{font-size:11px;color:#ccc;background:none;border:none;cursor:pointer}
 .clr:hover{color:#888}
-.log-body{max-height:220px;overflow-y:auto}
+.log-body{max-height:200px;overflow-y:auto}
 .log-item{padding:10px 0;border-bottom:1px solid #f0ede8}
 .log-item:last-child{border-bottom:none}
 .log-orig{font-size:12px;color:#bbb;line-height:1.5}
 .log-tl{font-size:14px;color:#1a1a1a;line-height:1.6;margin-top:2px}
-.log-empty{font-size:13px;color:#ccc;text-align:center;padding:20px 0}
-.status-bar{display:flex;align-items:center;gap:8px;margin-top:10px}
+.log-empty{font-size:13px;color:#ccc;text-align:center;padding:16px 0}
+.status-bar{display:flex;align-items:center;gap:8px;margin-top:8px}
 .sdot{width:6px;height:6px;border-radius:50%;background:#ccc;flex-shrink:0}
 .sdot.on{background:#2da87a;animation:pulse 1.2s infinite}
 .sdot.err{background:#e24b4a}
@@ -74,14 +84,14 @@ input[type=range]{width:100%;margin-top:6px}
   <div class="card">
     <div class="card-label">APIキー設定</div>
     <div class="vf">
-      <label>OpenAI APIキー（Whisper 文字起こし用）</label>
+      <label>OpenAI APIキー（Whisper用）</label>
       <div class="key-row">
         <input type="password" id="openaiKey" placeholder="sk-...">
         <button class="show-btn" onclick="toggleVis('openaiKey',this)">表示</button>
       </div>
     </div>
     <div class="vf">
-      <label>Anthropic APIキー（Claude 翻訳用）</label>
+      <label>Anthropic APIキー（Claude翻訳用）</label>
       <div class="key-row">
         <input type="password" id="claudeKey" placeholder="sk-ant-...">
         <button class="show-btn" onclick="toggleVis('claudeKey',this)">表示</button>
@@ -92,25 +102,25 @@ input[type=range]{width:100%;margin-top:6px}
   <div class="card">
     <div class="card-label">音量・速度設定</div>
     <div class="vol-row">
-      <label>元音声</label>
+      <label>元音声の音量</label>
       <input type="range" id="origVol" min="0" max="1" step="0.05" value="0.4"
-        oninput="document.getElementById('origVolVal').textContent=Math.round(this.value*100)+'%';document.getElementById('audioPlayer').volume=parseFloat(this.value)">
+        oninput="document.getElementById('origVolVal').textContent=Math.round(this.value*100)+'%';if(player)player.volume=parseFloat(this.value)">
       <span class="vol-val" id="origVolVal">40%</span>
     </div>
     <div class="vol-row">
-      <label>翻訳読み上げ</label>
+      <label>翻訳読み上げ音量</label>
       <input type="range" id="ttsVol" min="0" max="1" step="0.05" value="1.0"
         oninput="document.getElementById('ttsVolVal').textContent=Math.round(this.value*100)+'%'">
       <span class="vol-val" id="ttsVolVal">100%</span>
     </div>
     <div class="vol-row">
-      <label>読み上げ速度</label>
-      <input type="range" id="rateSlider" min="0.5" max="1.5" step="0.05" value="0.85"
-        oninput="document.getElementById('rv').textContent=parseFloat(this.value).toFixed(2)+'×'">
-      <span class="vol-val" id="rv">0.85×</span>
+      <label>翻訳読み上げ速度</label>
+      <input type="range" id="ttsRate" min="0.5" max="1.5" step="0.05" value="0.9"
+        oninput="document.getElementById('ttsRateVal').textContent=parseFloat(this.value).toFixed(2)+'×'">
+      <span class="vol-val" id="ttsRateVal">0.90×</span>
     </div>
     <div class="vf" style="margin-top:10px">
-      <label>声の種類</label>
+      <label>翻訳読み上げの声</label>
       <select id="voiceSel"></select>
     </div>
   </div>
@@ -123,7 +133,23 @@ input[type=range]{width:100%;margin-top:6px}
       <p>クリックして音声ファイルを選択</p>
       <p class="file-name" id="fileName">MP3 / M4A / WAV など</p>
     </div>
-    <audio id="audioPlayer"></audio>
+
+    <!-- 音源プレーヤー -->
+    <div class="player-wrap" id="playerWrap">
+      <div class="player-time">
+        <span id="curTime">0:00</span>
+        <span id="durTime">0:00</span>
+      </div>
+      <input type="range" class="seek-bar" id="seekBar" value="0" min="0" step="0.1"
+        oninput="onSeek(this.value)" onchange="onSeek(this.value)">
+      <div class="player-controls">
+        <label>再生速度</label>
+        <input type="range" id="playRate" min="0.5" max="2.0" step="0.1" value="1.0"
+          oninput="onPlayRateChange(this.value)">
+        <span id="playRateVal">1.0×</span>
+      </div>
+    </div>
+
     <div class="err-box" id="errBox"></div>
     <div style="display:flex;gap:8px">
       <button class="big-btn" id="startBtn" onclick="startTranslation()" disabled>
@@ -168,16 +194,16 @@ input[type=range]{width:100%;margin-top:6px}
 <script>
 const CHUNK_SEC = 5;
 
-// 英語らしいテキストかどうかを判定
+// 英語らしいテキストかチェック（数字のみ・記号のみ・短すぎる・拍手系をスキップ）
 function isValidEnglish(text) {
-  if (!text || text.trim().length < 10) return false;
-  // 英字の割合が50%以上であること
-  const letters = (text.match(/[a-zA-Z]/g) || []).length;
-  const ratio = letters / text.length;
-  if (ratio < 0.5) return false;
-  // 英単語が3つ以上含まれること
-  const words = text.trim().split(/\s+/).filter(w => /[a-zA-Z]{2,}/.test(w));
-  return words.length >= 3;
+  if (!text || text.trim().length < 8) return false;
+  const t = text.trim();
+  // 英字の割合が60%以上
+  const letters = (t.match(/[a-zA-Z]/g) || []).length;
+  if (letters / t.length < 0.6) return false;
+  // 英単語が2つ以上
+  const words = t.split(/\s+/).filter(w => /[a-zA-Z]{2,}/.test(w));
+  return words.length >= 2;
 }
 
 async function claudeTranslate(text, key) {
@@ -191,8 +217,8 @@ async function claudeTranslate(text, key) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      system: 'You are a translator. Translate the English text to Japanese. Return ONLY the Japanese translation. No comments, no explanations. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス',
+      max_tokens: 500,
+      system: 'You are a translator. Translate English to Japanese. Return ONLY the Japanese translation text. No comments, no explanations, no extra text whatsoever. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス',
       messages: [{ role: 'user', content: text }]
     })
   });
@@ -202,17 +228,49 @@ async function claudeTranslate(text, key) {
 }
 
 let voices = [], audioFile = null, shouldStop = false;
+let player = null;
+let seekInterval = null;
 
 window.addEventListener('load', () => {
   const ok = localStorage.getItem('openai_key');
   const ck = localStorage.getItem('claude_key');
   if (ok) document.getElementById('openaiKey').value = ok;
   if (ck) document.getElementById('claudeKey').value = ck;
+  player = document.createElement('audio');
+  player.addEventListener('timeupdate', updateSeekBar);
+  player.addEventListener('loadedmetadata', () => {
+    document.getElementById('seekBar').max = player.duration;
+    document.getElementById('durTime').textContent = formatTime(player.duration);
+  });
 });
+
 document.addEventListener('input', e => {
   if (e.target.id === 'openaiKey') localStorage.setItem('openai_key', e.target.value);
   if (e.target.id === 'claudeKey') localStorage.setItem('claude_key', e.target.value);
 });
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function updateSeekBar() {
+  if (!player) return;
+  const bar = document.getElementById('seekBar');
+  bar.value = player.currentTime;
+  document.getElementById('curTime').textContent = formatTime(player.currentTime);
+}
+
+function onSeek(val) {
+  if (player) { player.currentTime = parseFloat(val); }
+}
+
+function onPlayRateChange(val) {
+  const v = parseFloat(val);
+  document.getElementById('playRateVal').textContent = v.toFixed(1) + '×';
+  if (player) player.playbackRate = v;
+}
 
 function toggleVis(id, btn) {
   const el = document.getElementById(id);
@@ -250,7 +308,7 @@ function speak(text) {
     const vs = document.getElementById('voiceSel');
     const idx = parseInt(vs.options[vs.selectedIndex]?.value ?? 0);
     if (voices[idx]) utt.voice = voices[idx];
-    utt.rate = parseFloat(document.getElementById('rateSlider').value);
+    utt.rate = parseFloat(document.getElementById('ttsRate').value);
     utt.volume = parseFloat(document.getElementById('ttsVol').value);
     utt.pitch = 0.92;
     utt.onend = utt.onerror = () => resolve();
@@ -264,9 +322,10 @@ function onFileChange(e) {
   audioFile = file;
   document.getElementById('fileName').textContent = file.name;
   document.getElementById('startBtn').disabled = false;
-  const p = document.getElementById('audioPlayer');
-  p.src = URL.createObjectURL(file);
-  p.volume = parseFloat(document.getElementById('origVol').value);
+  document.getElementById('playerWrap').style.display = 'block';
+  player.src = URL.createObjectURL(file);
+  player.volume = parseFloat(document.getElementById('origVol').value);
+  player.playbackRate = parseFloat(document.getElementById('playRate').value);
   showErr('');
 }
 
@@ -275,13 +334,18 @@ async function whisperTranscribe(blob, key) {
   form.append('file', blob, 'chunk.wav');
   form.append('model', 'whisper-1');
   form.append('response_format', 'verbose_json');
+  form.append('timestamp_granularities[]', 'segment');
   const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST', headers: { 'Authorization': 'Bearer ' + key }, body: form
   });
   const d = await res.json();
   if (d.error) throw new Error(d.error.message);
-  const noSpeech = d.segments ? d.segments.reduce((a,s)=>a+s.no_speech_prob,0)/Math.max(d.segments.length,1) : 0;
-  return { text: d.text || '', lang: d.language || '', noSpeech };
+  // no_speech_prob の平均を計算
+  const segs = d.segments || [];
+  const avgNoSpeech = segs.length > 0
+    ? segs.reduce((a, s) => a + (s.no_speech_prob || 0), 0) / segs.length
+    : 0;
+  return { text: d.text || '', lang: d.language || '', noSpeech: avgNoSpeech };
 }
 
 function audioBufferToWav(buf) {
@@ -326,8 +390,8 @@ async function startTranslation() {
   document.getElementById('btnDot').style.display = 'inline-block';
   setStatus('on', '読み込み中...');
 
-  const player = document.getElementById('audioPlayer');
   player.volume = parseFloat(document.getElementById('origVol').value);
+  player.playbackRate = parseFloat(document.getElementById('playRate').value);
   player.currentTime = 0;
   player.play();
 
@@ -340,8 +404,11 @@ async function startTranslation() {
 
     for (let i = 0; i < total; i++) {
       if (shouldStop) break;
-      document.getElementById('progFill').style.width = Math.round(i / total * 100) + '%';
-      document.getElementById('progLbl').textContent = `${i + 1}/${total} (${Math.floor(i * CHUNK_SEC / 60)}分${(i * CHUNK_SEC) % 60}秒〜)`;
+      const pct = Math.round(i / total * 100);
+      document.getElementById('progFill').style.width = pct + '%';
+      const minSec = Math.floor(i * CHUNK_SEC / 60);
+      const sec = (i * CHUNK_SEC) % 60;
+      document.getElementById('progLbl').textContent = `${i + 1}/${total} (${minSec}分${sec}秒〜)`;
 
       const ss = i * CHUNK_SEC * sr;
       const es = Math.min((i + 1) * CHUNK_SEC * sr, decoded.length);
@@ -361,11 +428,25 @@ async function startTranslation() {
 
       const { text, lang, noSpeech } = result;
 
-      // 英語判定：Whisperのlangが"english"かつ英語らしいテキストのみ翻訳
-      if (lang !== 'english') continue;
-      if (noSpeech > 0.6) continue;
-      if (!isValidEnglish(text)) continue;
+      // 無音・拍手・音楽スキップ
+      if (noSpeech > 0.5) continue;
+      if (!text.trim()) continue;
       if (shouldStop) break;
+
+      if (lang === 'japanese') {
+        // 日本語はそのまま読み上げ
+        document.getElementById('subOrig').textContent = text;
+        document.getElementById('subTl').textContent = text;
+        document.getElementById('subTl').className = 'sub-tl';
+        addLog(text, text);
+        setStatus('on', `日本語読み上げ中 ${i + 1}/${total}`);
+        await speak(text);
+        continue;
+      }
+
+      // 英語以外（韓国語など）はスキップ
+      if (lang !== 'english') continue;
+      if (!isValidEnglish(text)) continue;
 
       setStatus('on', `翻訳中 ${i + 1}/${total}`);
       let tl;
@@ -403,7 +484,7 @@ async function startTranslation() {
 function stopTranslation() {
   shouldStop = true;
   speechSynthesis.cancel();
-  document.getElementById('audioPlayer').pause();
+  player.pause();
   document.getElementById('startBtn').style.display = 'flex';
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('btnDot').style.display = 'none';
