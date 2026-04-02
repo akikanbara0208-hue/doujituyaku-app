@@ -108,7 +108,7 @@ input[type=range]{width:100%;margin-top:4px}
     </div>
     <div class="vol-row">
       <label>翻訳読み上げ速度</label>
-      <input type="range" id="ttsRate" min="0.5" max="1.5" step="0.05" value="0.9"
+      <input type="range" id="ttsRate" min="0.5" max="2.0" step="0.05" value="0.9"
         oninput="document.getElementById('ttsRateVal').textContent=parseFloat(this.value).toFixed(2)+'×'">
       <span class="vol-val" id="ttsRateVal">0.90×</span>
     </div>
@@ -139,6 +139,10 @@ input[type=range]{width:100%;margin-top:4px}
       </div>
       <input type="range" class="seek-bar" id="seekBar" value="0" min="0" step="0.1"
         onchange="onSeek(this.value)">
+      <div style="display:flex;justify-content:center;gap:12px;margin-bottom:8px">
+        <button onclick="skipTime(-15)" style="font-size:12px;padding:5px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;">◀ 15秒</button>
+        <button onclick="skipTime(15)" style="font-size:12px;padding:5px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;">15秒 ▶</button>
+      </div>
     </div>
     <div class="err-box" id="errBox"></div>
     <div style="display:flex;gap:8px">
@@ -264,6 +268,16 @@ function onSeek(val) {
   player.currentTime = parseFloat(val);
   if (decodedAudio) resumeFromChunk = Math.floor(parseFloat(val) / CHUNK_SEC);
 }
+function skipTime(sec) {
+  if (!player) return;
+  const newTime = Math.max(0, Math.min(player.currentTime + sec, player.duration || 0));
+  player.currentTime = newTime;
+  document.getElementById('seekBar').value = newTime;
+  if (decodedAudio) {
+    resumeFromChunk = Math.floor(newTime / CHUNK_SEC);
+  }
+}
+
 function onPlayRateChange(val) {
   const v = parseFloat(val);
   document.getElementById('playRateVal').textContent = v.toFixed(1) + '×';
@@ -294,6 +308,9 @@ function loadVoices() {
     o.textContent = v.name.replace(/\(.*\)/, '').trim();
     vs.appendChild(o);
   });
+  // デフォルトをHarukaに設定
+  const harukaIdx = Array.from(vs.options).findIndex(o => o.textContent.includes('Haruka'));
+  if (harukaIdx >= 0) vs.selectedIndex = harukaIdx;
 }
 speechSynthesis.onvoiceschanged = loadVoices;
 loadVoices();
