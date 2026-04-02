@@ -34,8 +34,11 @@ input[type=range]{width:100%;margin-top:4px}
 .err-box{font-size:12px;color:#a00;background:#fde8e8;border:1px solid #f5b8b8;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:none}
 .player-wrap{background:#f9f8f5;border:1px solid #e0ddd8;border-radius:10px;padding:12px;margin-bottom:10px;display:none}
 .player-time{display:flex;justify-content:space-between;font-size:11px;color:#aaa;margin-bottom:4px}
-.seek-bar{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:#e0ddd8;border-radius:3px;outline:none;cursor:pointer}
+.seek-bar{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:#e0ddd8;border-radius:3px;outline:none;cursor:pointer;margin-bottom:8px}
 .seek-bar::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#2da87a;cursor:pointer}
+.skip-btns{display:flex;justify-content:center;gap:12px;margin-bottom:4px}
+.skip-btn{font-size:12px;padding:5px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer}
+.skip-btn:hover{background:#f0ede8}
 .big-btn{width:100%;height:48px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .15s}
 .big-btn:hover{background:#f5f4f0}
 .big-btn:disabled{opacity:.4;cursor:not-allowed}
@@ -97,25 +100,19 @@ input[type=range]{width:100%;margin-top:4px}
     <div class="vol-row">
       <label>元音声の音量</label>
       <input type="range" id="origVol" min="0" max="1" step="0.05" value="0.4"
-        oninput="document.getElementById('origVolVal').textContent=Math.round(this.value*100)+'%';if(player)player.volume=parseFloat(this.value)">
+        oninput="document.getElementById('origVolVal').textContent=Math.round(this.value*100)+'%';if(player)player.volume=parseFloat(this.value);localStorage.setItem('orig_vol',this.value)">
       <span class="vol-val" id="origVolVal">40%</span>
     </div>
     <div class="vol-row">
       <label>翻訳読み上げ音量</label>
       <input type="range" id="ttsVol" min="0" max="1" step="0.05" value="1.0"
-        oninput="document.getElementById('ttsVolVal').textContent=Math.round(this.value*100)+'%'">
+        oninput="document.getElementById('ttsVolVal').textContent=Math.round(this.value*100)+'%';localStorage.setItem('tts_vol',this.value)">
       <span class="vol-val" id="ttsVolVal">100%</span>
     </div>
     <div class="vol-row">
-      <label>翻訳読み上げ速度</label>
-      <input type="range" id="ttsRate" min="0.5" max="2.0" step="0.05" value="0.9"
-        oninput="document.getElementById('ttsRateVal').textContent=parseFloat(this.value).toFixed(2)+'×'">
-      <span class="vol-val" id="ttsRateVal">0.90×</span>
-    </div>
-    <div class="vol-row">
-      <label>音源の再生速度</label>
+      <label>再生・読み上げ速度</label>
       <input type="range" id="playRate" min="0.5" max="2.0" step="0.1" value="1.0"
-        oninput="document.getElementById('playRateVal').textContent=parseFloat(this.value).toFixed(1)+'×';if(player)player.playbackRate=parseFloat(this.value)">
+        oninput="onRateChange(this.value)">
       <span class="vol-val" id="playRateVal">1.0×</span>
     </div>
     <div class="vf" style="margin-top:10px">
@@ -132,6 +129,7 @@ input[type=range]{width:100%;margin-top:4px}
       <p>クリックして音声ファイルを選択</p>
       <p class="file-name" id="fileName">MP3 / M4A / WAV など</p>
     </div>
+
     <div class="player-wrap" id="playerWrap">
       <div class="player-time">
         <span id="curTime">0:00</span>
@@ -139,11 +137,12 @@ input[type=range]{width:100%;margin-top:4px}
       </div>
       <input type="range" class="seek-bar" id="seekBar" value="0" min="0" step="0.1"
         onchange="onSeek(this.value)">
-      <div style="display:flex;justify-content:center;gap:12px;margin-bottom:8px">
-        <button onclick="skipTime(-15)" style="font-size:12px;padding:5px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;">◀ 15秒</button>
-        <button onclick="skipTime(15)" style="font-size:12px;padding:5px 12px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;">15秒 ▶</button>
+      <div class="skip-btns">
+        <button class="skip-btn" onclick="skipTime(-15)">◀ 15秒</button>
+        <button class="skip-btn" onclick="skipTime(15)">15秒 ▶</button>
       </div>
     </div>
+
     <div class="err-box" id="errBox"></div>
     <div style="display:flex;gap:8px">
       <button class="big-btn" id="startBtn" onclick="startTranslation()" disabled>
@@ -191,15 +190,18 @@ let resumeFromChunk = 0;
 let lastSpoken = '';
 let decodedAudio = null;
 let totalChunks = 0;
-let voices = [], audioFile = null, shouldStop = false;
+let shouldStop = false;
+let voices = [];
+let audioFile = null;
 let player = null;
 
+// 英語らしいかチェック（緩めに設定）
 function isValidEnglish(text) {
   if (!text || text.trim().length < 8) return false;
   const t = text.trim();
   const letters = (t.match(/[a-zA-Z]/g) || []).length;
-  if (letters / t.length < 0.5) return false;
-  const words = t.split(/\s+/).filter(w => /[a-zA-Z]{3,}/.test(w));
+  if (letters / t.length < 0.4) return false;
+  const words = t.split(/\s+/).filter(w => /[a-zA-Z]{2,}/.test(w));
   return words.length >= 2;
 }
 
@@ -222,7 +224,7 @@ async function claudeTranslate(text, key) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 500,
-      system: 'You are a translator. Translate English to Japanese. Return ONLY the Japanese translation. No comments. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス, Pritaji→プリタジ, Krishnaji→クリシュナジ',
+      system: 'You are a translator. Translate English to Japanese. Return ONLY the Japanese translation. No English, no comments. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス, Pritaji→プリタジ, Krishnaji→クリシュナジ',
       messages: [{ role: 'user', content: text }]
     })
   });
@@ -236,15 +238,19 @@ window.addEventListener('load', () => {
   const ck = localStorage.getItem('claude_key');
   if (ok) document.getElementById('openaiKey').value = ok;
   if (ck) document.getElementById('claudeKey').value = ck;
+
+  const savedOrigVol = localStorage.getItem('orig_vol');
+  const savedTtsVol = localStorage.getItem('tts_vol');
+  const savedRate = localStorage.getItem('play_rate');
+  if (savedOrigVol) { document.getElementById('origVol').value = savedOrigVol; document.getElementById('origVolVal').textContent = Math.round(savedOrigVol*100)+'%'; }
+  if (savedTtsVol) { document.getElementById('ttsVol').value = savedTtsVol; document.getElementById('ttsVolVal').textContent = Math.round(savedTtsVol*100)+'%'; }
+  if (savedRate) { document.getElementById('playRate').value = savedRate; document.getElementById('playRateVal').textContent = parseFloat(savedRate).toFixed(1)+'×'; }
+
   player = new Audio();
   player.addEventListener('timeupdate', updateSeekBar);
   player.addEventListener('loadedmetadata', () => {
     document.getElementById('seekBar').max = player.duration;
     document.getElementById('durTime').textContent = formatTime(player.duration);
-  });
-  player.addEventListener('ended', () => {
-    // 音源が終わったら停止
-    if (!shouldStop) stopTranslation();
   });
 });
 
@@ -252,6 +258,13 @@ document.addEventListener('input', e => {
   if (e.target.id === 'openaiKey') localStorage.setItem('openai_key', e.target.value);
   if (e.target.id === 'claudeKey') localStorage.setItem('claude_key', e.target.value);
 });
+
+function onRateChange(val) {
+  const v = parseFloat(val);
+  document.getElementById('playRateVal').textContent = v.toFixed(1) + '×';
+  if (player) player.playbackRate = v;
+  localStorage.setItem('play_rate', val);
+}
 
 function formatTime(sec) {
   const m = Math.floor(sec / 60);
@@ -266,22 +279,14 @@ function updateSeekBar() {
 function onSeek(val) {
   if (!player) return;
   player.currentTime = parseFloat(val);
-  if (decodedAudio) resumeFromChunk = Math.floor(parseFloat(val) / CHUNK_SEC);
+  resumeFromChunk = Math.floor(parseFloat(val) / CHUNK_SEC);
 }
 function skipTime(sec) {
   if (!player) return;
   const newTime = Math.max(0, Math.min(player.currentTime + sec, player.duration || 0));
   player.currentTime = newTime;
   document.getElementById('seekBar').value = newTime;
-  if (decodedAudio) {
-    resumeFromChunk = Math.floor(newTime / CHUNK_SEC);
-  }
-}
-
-function onPlayRateChange(val) {
-  const v = parseFloat(val);
-  document.getElementById('playRateVal').textContent = v.toFixed(1) + '×';
-  if (player) player.playbackRate = v;
+  resumeFromChunk = Math.floor(newTime / CHUNK_SEC);
 }
 
 function toggleVis(id, btn) {
@@ -308,7 +313,6 @@ function loadVoices() {
     o.textContent = v.name.replace(/\(.*\)/, '').trim();
     vs.appendChild(o);
   });
-  // デフォルトをHarukaに設定
   const harukaIdx = Array.from(vs.options).findIndex(o => o.textContent.includes('Haruka'));
   if (harukaIdx >= 0) vs.selectedIndex = harukaIdx;
 }
@@ -323,7 +327,7 @@ function speak(text) {
     const vs = document.getElementById('voiceSel');
     const idx = parseInt(vs.options[vs.selectedIndex]?.value ?? 0);
     if (voices[idx]) utt.voice = voices[idx];
-    utt.rate = parseFloat(document.getElementById('ttsRate').value);
+    utt.rate = parseFloat(document.getElementById('playRate').value);
     utt.volume = parseFloat(document.getElementById('ttsVol').value);
     utt.pitch = 0.92;
     utt.onend = utt.onerror = () => resolve();
@@ -343,6 +347,7 @@ function onFileChange(e) {
   document.getElementById('playerWrap').style.display = 'block';
   player.src = URL.createObjectURL(file);
   player.volume = parseFloat(document.getElementById('origVol').value);
+  player.playbackRate = parseFloat(document.getElementById('playRate').value);
   showErr('');
 }
 
@@ -358,8 +363,7 @@ async function whisperTranscribe(blob, key) {
   const d = await res.json();
   if (d.error) throw new Error(d.error.message);
   const segs = d.segments || [];
-  const avgNoSpeech = segs.length > 0
-    ? segs.reduce((a, s) => a + (s.no_speech_prob || 0), 0) / segs.length : 0;
+  const avgNoSpeech = segs.length > 0 ? segs.reduce((a, s) => a + (s.no_speech_prob || 0), 0) / segs.length : 0;
   return { text: d.text || '', lang: d.language || '', noSpeech: avgNoSpeech };
 }
 
@@ -391,39 +395,6 @@ function addLog(orig, tl) {
 function clearLog() { document.getElementById('logBody').innerHTML = '<div class="log-empty" id="logEmpty">まだ通訳がありません</div>'; }
 function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
-async function processChunk(i, sr, ok, ck) {
-  const ss = i * CHUNK_SEC * sr;
-  const es = Math.min((i + 1) * CHUNK_SEC * sr, decodedAudio.length);
-  const cl = es - ss;
-  const oc = new OfflineAudioContext(1, cl, sr);
-  const src = oc.createBufferSource();
-  const cb = new AudioBuffer({ numberOfChannels: 1, length: cl, sampleRate: sr });
-  cb.copyToChannel(decodedAudio.getChannelData(0).slice(ss, es), 0);
-  src.buffer = cb; src.connect(oc.destination); src.start();
-  const rendered = await oc.startRendering();
-  const wav = audioBufferToWav(rendered);
-
-  const result = await whisperTranscribe(wav, ok);
-  const { text, lang, noSpeech } = result;
-
-  if (!text.trim()) return null;
-  if (noSpeech > 0.6) continue;
-
-  if (lang === 'japanese') {
-    if (isDuplicate(text)) return null;
-    return { type: 'ja', text, tl: text };
-  }
-  if (lang !== 'english') return null;
-  if (!isValidEnglish(text)) return null;
-  if (isDuplicate(text)) return null;
-
-  const tl = await claudeTranslate(text, ck);
-  if (!tl) return null;
-  if (isDuplicate(tl)) return null;
-
-  return { type: 'en', text, tl };
-}
-
 async function startTranslation() {
   const ok = document.getElementById('openaiKey').value.trim();
   const ck = document.getElementById('claudeKey').value.trim();
@@ -438,60 +409,108 @@ async function startTranslation() {
   document.getElementById('btnDot').style.display = 'inline-block';
   setStatus('on', '読み込み中...');
 
+  if (!decodedAudio) {
+    const ab = await audioFile.arrayBuffer();
+    const ac = new AudioContext();
+    decodedAudio = await ac.decodeAudioData(ab);
+    totalChunks = Math.ceil(decodedAudio.duration / CHUNK_SEC);
+  }
+
+  // シークバーの現在位置から開始
+  const startChunk = resumeFromChunk;
   player.volume = parseFloat(document.getElementById('origVol').value);
-  player.playbackRate = parseFloat(document.getElementById('playRate')?.value || 1);
-  player.currentTime = resumeFromChunk * CHUNK_SEC;
+  player.playbackRate = parseFloat(document.getElementById('playRate').value);
+  player.currentTime = startChunk * CHUNK_SEC;
   player.play();
 
-  try {
-    if (!decodedAudio) {
-      const ab = await audioFile.arrayBuffer();
-      const ac = new AudioContext();
-      decodedAudio = await ac.decodeAudioData(ab);
-      totalChunks = Math.ceil(decodedAudio.duration / CHUNK_SEC);
-    }
-    const sr = decodedAudio.sampleRate;
+  const sr = decodedAudio.sampleRate;
+  const translationQueue = [];
+  let speakingDone = false;
 
-    // 先読みキュー：音源再生と並行して次のチャンクを処理
-    let nextChunkPromise = null;
-
-    for (let i = resumeFromChunk; i < totalChunks; i++) {
-      if (shouldStop) { resumeFromChunk = i; break; }
-
-      const pct = Math.round(i / totalChunks * 100);
-      document.getElementById('progFill').style.width = pct + '%';
-      document.getElementById('progLbl').textContent = `${i + 1}/${totalChunks} (${Math.floor(i * CHUNK_SEC / 60)}分${(i * CHUNK_SEC) % 60}秒〜)`;
-
-      // 現在のチャンクを処理（または先読み済みを使う）
-      setStatus('on', `文字起こし・翻訳中 ${i + 1}/${totalChunks}`);
-      const result = nextChunkPromise ? await nextChunkPromise : await processChunk(i, sr, ok, ck);
-
-      // 次のチャンクを並行で先読み開始
-      if (i + 1 < totalChunks && !shouldStop) {
-        nextChunkPromise = processChunk(i + 1, sr, ok, ck);
-      } else {
-        nextChunkPromise = null;
-      }
-
-      if (!result || shouldStop) continue;
-
-      // 音源の再生位置がこのチャンクの開始時刻に達するまで待つ
-      const chunkStartTime = i * CHUNK_SEC;
-      while (player.currentTime < chunkStartTime && !shouldStop) {
-        await new Promise(r => setTimeout(r, 200));
-      }
-
+  // 裏で文字起こし・翻訳を先行処理
+  const transcribeAll = async () => {
+    for (let i = startChunk; i < totalChunks; i++) {
       if (shouldStop) break;
 
-      document.getElementById('subOrig').textContent = result.text;
-      document.getElementById('subTl').textContent = result.tl;
-      document.getElementById('subTl').className = 'sub-tl';
-      addLog(result.text, result.tl);
+      document.getElementById('progFill').style.width = Math.round(i / totalChunks * 100) + '%';
+      document.getElementById('progLbl').textContent = `処理中 ${i + 1}/${totalChunks} (${Math.floor(i * CHUNK_SEC / 60)}分${(i * CHUNK_SEC) % 60}秒〜)`;
 
-      setStatus('on', `読み上げ中 ${i + 1}/${totalChunks}`);
-      await speak(result.tl);
+      const ss = i * CHUNK_SEC * sr;
+      const es = Math.min((i + 1) * CHUNK_SEC * sr, decodedAudio.length);
+      const cl = es - ss;
+      const oc = new OfflineAudioContext(1, cl, sr);
+      const src = oc.createBufferSource();
+      const cb = new AudioBuffer({ numberOfChannels: 1, length: cl, sampleRate: sr });
+      cb.copyToChannel(decodedAudio.getChannelData(0).slice(ss, es), 0);
+      src.buffer = cb; src.connect(oc.destination); src.start();
+      const rendered = await oc.startRendering();
+      const wav = audioBufferToWav(rendered);
+
+      let result;
+      try { result = await whisperTranscribe(wav, ok); }
+      catch (e) { translationQueue.push({ i, skip: true }); continue; }
+
+      const { text, lang, noSpeech } = result;
+
+      // 無音・拍手スキップ
+      if (noSpeech > 0.6 || !text.trim()) { translationQueue.push({ i, skip: true }); continue; }
+
+      if (lang === 'japanese') {
+        translationQueue.push({ i, text, tl: text, lang: 'japanese' });
+        continue;
+      }
+
+      if (lang !== 'english' || !isValidEnglish(text)) { translationQueue.push({ i, skip: true }); continue; }
+
+      let tl;
+      try { tl = await claudeTranslate(text, ck); }
+      catch (e) { translationQueue.push({ i, skip: true }); continue; }
+
+      // 英語のまま返ってきたらもう一度翻訳
+      if (tl && /[a-zA-Z]{3,}/.test(tl) && (tl.match(/[a-zA-Z]/g)||[]).length / tl.length > 0.5) {
+        try { tl = await claudeTranslate(text, ck); } catch(e) {}
+      }
+
+      translationQueue.push({ i, text, tl: tl || text, lang: 'english' });
     }
+    speakingDone = true;
+  };
 
+  // 音源位置に合わせて読み上げ
+  const speakInSync = async () => {
+    let nextIdx = startChunk;
+    while (!shouldStop) {
+      const item = translationQueue.find(q => q.i === nextIdx);
+      if (!item) {
+        if (speakingDone && nextIdx >= totalChunks) break;
+        await new Promise(r => setTimeout(r, 100));
+        continue;
+      }
+
+      // 音源がこのチャンクの時間帯になるまで待つ
+      const chunkStart = nextIdx * CHUNK_SEC;
+      while (!shouldStop && player.currentTime < chunkStart) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      if (!item.skip && !shouldStop) {
+        document.getElementById('subOrig').textContent = item.text;
+        document.getElementById('subTl').textContent = item.tl;
+        document.getElementById('subTl').className = 'sub-tl';
+        if (!isDuplicate(item.tl)) {
+          addLog(item.text, item.tl);
+          setStatus('on', `読み上げ中 ${nextIdx + 1}/${totalChunks}`);
+          await speak(item.tl);
+        }
+      }
+
+      nextIdx++;
+      resumeFromChunk = nextIdx;
+    }
+  };
+
+  try {
+    await Promise.all([transcribeAll(), speakInSync()]);
     if (!shouldStop) {
       resumeFromChunk = 0;
       document.getElementById('progFill').style.width = '100%';
@@ -520,7 +539,6 @@ function stopTranslation() {
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('btnDot').style.display = 'none';
   setStatus('', '停止中 — 続きから再開できます');
-  document.getElementById('progLbl').textContent = '停止しました';
 }
 </script>
 </body>
