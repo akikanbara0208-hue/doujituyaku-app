@@ -195,12 +195,12 @@ let voices = [], audioFile = null, shouldStop = false;
 let player = null;
 
 function isValidEnglish(text) {
-  if (!text || text.trim().length < 15) return false;
+  if (!text || text.trim().length < 8) return false;
   const t = text.trim();
   const letters = (t.match(/[a-zA-Z]/g) || []).length;
   if (letters / t.length < 0.5) return false;
   const words = t.split(/\s+/).filter(w => /[a-zA-Z]{3,}/.test(w));
-  return words.length >= 3;
+  return words.length >= 2;
 }
 
 function isDuplicate(text) {
@@ -407,7 +407,7 @@ async function processChunk(i, sr, ok, ck) {
   const { text, lang, noSpeech } = result;
 
   if (!text.trim()) return null;
-  if (noSpeech > 0.4) return null;
+  if (noSpeech > 0.6) continue;
 
   if (lang === 'japanese') {
     if (isDuplicate(text)) return null;
