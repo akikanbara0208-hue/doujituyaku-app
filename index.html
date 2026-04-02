@@ -428,13 +428,9 @@ async function startTranslation() {
 
       const { text, lang, noSpeech } = result;
 
-      // 無音・拍手・音楽スキップ
-      if (noSpeech > 0.8) continue;
-      if (!text.trim()) continue;
-      if (shouldStop) break;
+      if (!text.trim() || shouldStop) continue;
 
       if (lang === 'japanese') {
-        // 日本語はそのまま読み上げ
         document.getElementById('subOrig').textContent = text;
         document.getElementById('subTl').textContent = text;
         document.getElementById('subTl').className = 'sub-tl';
@@ -444,7 +440,6 @@ async function startTranslation() {
         continue;
       }
 
-      // 英語以外（韓国語など）はスキップ
       if (lang !== 'english') continue;
       if (!isValidEnglish(text)) continue;
 
@@ -459,6 +454,7 @@ async function startTranslation() {
       document.getElementById('subTl').className = 'sub-tl';
       addLog(text, tl);
 
+      if (isDuplicate(tl)) continue;
       setStatus('on', `読み上げ中 ${i + 1}/${total}`);
       await speak(tl);
     }
