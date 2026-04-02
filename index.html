@@ -10,7 +10,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',san
 .app{max-width:640px;margin:0 auto}
 h1{font-size:22px;font-weight:500;text-align:center;margin-bottom:4px}
 .hero-sub{font-size:13px;color:#888;text-align:center;margin-bottom:1.5rem}
-.badge{font-size:11px;font-weight:600;background:#e8f7f1;color:#1a7a55;border:1px solid #b8e8d4;border-radius:20px;padding:3px 12px;display:block;text-align:center;width:fit-content;margin:0 auto 1.5rem}
 .card{background:#fff;border:1px solid #e0ddd8;border-radius:14px;padding:16px;margin-bottom:12px}
 .card-label{font-size:11px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
 .vf{margin-bottom:10px}
@@ -31,6 +30,7 @@ input[type=range]{width:100%;margin-top:6px}
 .file-area p{font-size:13px;color:#888}
 .file-name{font-size:12px;color:#bbb;margin-top:4px}
 .err-box{font-size:12px;color:#a00;background:#fde8e8;border:1px solid #f5b8b8;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:none}
+audio{width:100%;border-radius:8px;margin-bottom:10px;display:none}
 .big-btn{width:100%;height:50px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .15s}
 .big-btn:hover{background:#f5f4f0}
 .big-btn.running{background:#e8f7f1;border-color:#2da87a;color:#1a7a55}
@@ -43,6 +43,10 @@ input[type=range]{width:100%;margin-top:6px}
 .prog-bar{height:4px;background:#e8e4dc;border-radius:2px;overflow:hidden}
 .prog-fill{height:100%;background:#2da87a;border-radius:2px;transition:width .4s}
 .prog-lbl{font-size:11px;color:#aaa;margin-top:4px;text-align:center}
+.vol-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+.vol-row label{font-size:12px;color:#666;white-space:nowrap}
+.vol-row input{flex:1}
+.vol-val{font-size:12px;color:#999;min-width:40px}
 .sub-wrap{margin-bottom:12px}
 .sub-box{background:#fff;border:1px solid #e0ddd8;border-radius:14px;padding:22px 24px;min-height:110px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:8px}
 .sub-orig{font-size:13px;color:#bbb;line-height:1.6;width:100%;min-height:20px}
@@ -96,10 +100,22 @@ input[type=range]{width:100%;margin-top:6px}
         <select id="voiceSel"></select>
       </div>
       <div class="vf" style="margin-bottom:0">
-        <label>速度<span class="rv" id="rv">0.85×</span></label>
+        <label>翻訳読み上げ速度<span class="rv" id="rv">0.85×</span></label>
         <input type="range" id="rateSlider" min="0.5" max="1.5" step="0.05" value="0.85"
           oninput="document.getElementById('rv').textContent=parseFloat(this.value).toFixed(2)+'×'">
       </div>
+    </div>
+    <div class="vol-row">
+      <label>元音声の音量</label>
+      <input type="range" id="origVol" min="0" max="1" step="0.05" value="0.5"
+        oninput="document.getElementById('origVolVal').textContent=Math.round(this.value*100)+'%';document.getElementById('audioPlayer').volume=parseFloat(this.value)">
+      <span class="vol-val" id="origVolVal">50%</span>
+    </div>
+    <div class="vol-row">
+      <label>翻訳音声の音量</label>
+      <input type="range" id="ttsVol" min="0" max="1" step="0.05" value="1.0"
+        oninput="document.getElementById('ttsVolVal').textContent=Math.round(this.value*100)+'%'">
+      <span class="vol-val" id="ttsVolVal">100%</span>
     </div>
   </div>
 
@@ -111,6 +127,7 @@ input[type=range]{width:100%;margin-top:6px}
       <p>クリックして音声ファイルを選択</p>
       <p class="file-name" id="fileName">MP3 / M4A / WAV など</p>
     </div>
+    <audio id="audioPlayer"></audio>
     <div class="err-box" id="errBox"></div>
     <div style="display:flex;gap:8px">
       <button class="big-btn" id="startBtn" onclick="startTranslation()" disabled>
@@ -154,277 +171,272 @@ input[type=range]{width:100%;margin-top:6px}
 
 <script>
 const CHUNK_SEC = 30;
-const ONENESS_SYSTEM = `あなたはONENESSムーブメントの専門通訳者です。以下のルールに従って翻訳してください。
+const SYSTEM = `あなたはONENESSムーブメントの専門通訳者です。以下のルールに厳密に従ってください。
 
-【翻訳ルール】
-- 英語のみ日本語に翻訳する
+【絶対ルール】
+- 英語が含まれていれば必ず日本語に翻訳して出力する
 - 日本語はそのまま日本語で出力する
-- 韓国語は無視してスキップする（何も出力しない）
-- 翻訳は穏やかで自然な口調にする
-- 翻訳文のみを返す（説明不要）
-- 笑い声・拍手等の非言語音声は無視する
+- 韓国語は無視して何も出力しない
+- 翻訳文のみを返す。説明・コメント・注釈は一切不要
+- 「音楽」「翻訳対象外」「instrumental」などのコメントは絶対に出力しない
+- 発話が含まれていれば必ず翻訳する
 
-【ONENESS専門用語の翻訳】
-Deeksha / Oneness Blessing → ディークシャ
-Awakening → 覚醒
-Enlightenment → 悟り・解脱
-Oneness → ワンネス
-The Divine → 神聖なるもの
-Liberation / Mukti → 解放・ムクティ
-Golden City → ゴールデンシティ
-Sri Amma / Sri Bhagavan → シュリ・アンマ / シュリ・バガヴァン
-Consciousness → 意識
-Grace → 恩寵
-Surrender → 委ねる
-Presence → プレゼンス
-Sacred Chamber → 聖なる部屋
-Process → プロセス
-Initiation → イニシエーション
+【ONENESS専門用語】
+Deeksha/Oneness Blessing→ディークシャ
+Awakening→覚醒
+Enlightenment→悟り・解脱
+Oneness→ワンネス
+The Divine→神聖なるもの
+Liberation/Mukti→解放・ムクティ
+Golden City→ゴールデンシティ
+Sri Amma/Sri Bhagavan→シュリ・アンマ/シュリ・バガヴァン
+Consciousness→意識
+Grace→恩寵
+Surrender→委ねる
+Presence→プレゼンス
+Sacred Chamber→聖なる部屋
+Process→プロセス
+Initiation→イニシエーション
 
 入力テキスト：`;
 
-let voices = [], audioFile = null, shouldStop = false, isRunning = false;
+let voices=[], audioFile=null, shouldStop=false, isRunning=false;
 
-window.addEventListener('load', () => {
-  const ok = localStorage.getItem('openai_key');
-  const ck = localStorage.getItem('claude_key');
-  if (ok) document.getElementById('openaiKey').value = ok;
-  if (ck) document.getElementById('claudeKey').value = ck;
+window.addEventListener('load',()=>{
+  const ok=localStorage.getItem('openai_key');
+  const ck=localStorage.getItem('claude_key');
+  if(ok) document.getElementById('openaiKey').value=ok;
+  if(ck) document.getElementById('claudeKey').value=ck;
 });
-document.addEventListener('input', e => {
-  if (e.target.id === 'openaiKey') localStorage.setItem('openai_key', e.target.value);
-  if (e.target.id === 'claudeKey') localStorage.setItem('claude_key', e.target.value);
+document.addEventListener('input',e=>{
+  if(e.target.id==='openaiKey') localStorage.setItem('openai_key',e.target.value);
+  if(e.target.id==='claudeKey') localStorage.setItem('claude_key',e.target.value);
 });
 
-function toggleVis(id, btn) {
-  const el = document.getElementById(id);
-  el.type = el.type === 'password' ? 'text' : 'password';
-  btn.textContent = el.type === 'password' ? '表示' : '隠す';
+function toggleVis(id,btn){
+  const el=document.getElementById(id);
+  el.type=el.type==='password'?'text':'password';
+  btn.textContent=el.type==='password'?'表示':'隠す';
 }
-
-function setStatus(cls, msg) {
-  document.getElementById('stxt').textContent = msg;
-  document.getElementById('sdot').className = 'sdot' + (cls ? ' '+cls : '');
+function setStatus(cls,msg){
+  document.getElementById('stxt').textContent=msg;
+  document.getElementById('sdot').className='sdot'+(cls?' '+cls:'');
 }
-
-function showErr(msg) {
-  const b = document.getElementById('errBox');
-  b.textContent = msg;
-  b.style.display = msg ? 'block' : 'none';
+function showErr(msg){
+  const b=document.getElementById('errBox');
+  b.textContent=msg; b.style.display=msg?'block':'none';
 }
-
-function loadVoices() {
-  voices = speechSynthesis.getVoices();
-  const vs = document.getElementById('voiceSel');
-  vs.innerHTML = '';
-  const filtered = voices.filter(v => v.lang.startsWith('ja'));
-  (filtered.length ? filtered : voices.slice(0,8)).forEach(v => {
-    const o = document.createElement('option');
-    o.value = voices.indexOf(v);
-    o.textContent = v.name.replace(/\(.*\)/,'').trim();
+function loadVoices(){
+  voices=speechSynthesis.getVoices();
+  const vs=document.getElementById('voiceSel');
+  vs.innerHTML='';
+  const filtered=voices.filter(v=>v.lang.startsWith('ja'));
+  (filtered.length?filtered:voices.slice(0,8)).forEach(v=>{
+    const o=document.createElement('option');
+    o.value=voices.indexOf(v);
+    o.textContent=v.name.replace(/\(.*\)/,'').trim();
     vs.appendChild(o);
   });
 }
-speechSynthesis.onvoiceschanged = loadVoices;
+speechSynthesis.onvoiceschanged=loadVoices;
 loadVoices();
 
-function speak(text) {
-  return new Promise(resolve => {
-    if (shouldStop || !text.trim()) { resolve(); return; }
+function speak(text){
+  return new Promise(resolve=>{
+    if(shouldStop||!text.trim()){resolve();return;}
     speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    const vs = document.getElementById('voiceSel');
-    const idx = parseInt(vs.options[vs.selectedIndex]?.value ?? 0);
-    if (voices[idx]) utt.voice = voices[idx];
-    utt.rate = parseFloat(document.getElementById('rateSlider').value);
-    utt.pitch = 0.92;
-    utt.onend = utt.onerror = () => resolve();
+    const utt=new SpeechSynthesisUtterance(text);
+    const vs=document.getElementById('voiceSel');
+    const idx=parseInt(vs.options[vs.selectedIndex]?.value??0);
+    if(voices[idx]) utt.voice=voices[idx];
+    utt.rate=parseFloat(document.getElementById('rateSlider').value);
+    utt.volume=parseFloat(document.getElementById('ttsVol').value);
+    utt.pitch=0.92;
+    utt.onend=utt.onerror=()=>resolve();
     speechSynthesis.speak(utt);
   });
 }
 
-function onFileChange(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  audioFile = file;
-  document.getElementById('fileName').textContent = file.name;
-  document.getElementById('startBtn').disabled = false;
+function onFileChange(e){
+  const file=e.target.files[0];
+  if(!file) return;
+  audioFile=file;
+  document.getElementById('fileName').textContent=file.name;
+  document.getElementById('startBtn').disabled=false;
+  const player=document.getElementById('audioPlayer');
+  player.src=URL.createObjectURL(file);
+  player.volume=parseFloat(document.getElementById('origVol').value);
   showErr('');
 }
 
-async function whisperTranscribe(blob, openaiKey) {
-  const form = new FormData();
-  form.append('file', blob, 'chunk.wav');
-  form.append('model', 'whisper-1');
-  form.append('response_format', 'verbose_json');
-  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + openaiKey },
-    body: form
+async function whisperTranscribe(blob,openaiKey){
+  const form=new FormData();
+  form.append('file',blob,'chunk.wav');
+  form.append('model','whisper-1');
+  form.append('response_format','verbose_json');
+  const res=await fetch('https://api.openai.com/v1/audio/transcriptions',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+openaiKey},
+    body:form
   });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.text || '';
+  const data=await res.json();
+  if(data.error) throw new Error(data.error.message);
+  return data.text||'';
 }
 
-async function claudeTranslate(text, claudeKey) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': claudeKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
+async function claudeTranslate(text,claudeKey){
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':claudeKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
     },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: ONENESS_SYSTEM + text }]
+    body:JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1000,
+      messages:[{role:'user',content:SYSTEM+text}]
     })
   });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.content?.[0]?.text?.trim() || '';
+  const data=await res.json();
+  if(data.error) throw new Error(data.error.message);
+  return data.content?.[0]?.text?.trim()||'';
 }
 
-function audioBufferToWav(buffer) {
-  const sr = buffer.sampleRate;
-  const samples = buffer.getChannelData(0);
-  const len = samples.length;
-  const ab = new ArrayBuffer(44 + len * 2);
-  const v = new DataView(ab);
-  const ws = (o,s) => { for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
-  ws(0,'RIFF'); v.setUint32(4,36+len*2,true); ws(8,'WAVE');
-  ws(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true);
-  v.setUint16(22,1,true); v.setUint32(24,sr,true);
-  v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
-  ws(36,'data'); v.setUint32(40,len*2,true);
+function audioBufferToWav(buffer){
+  const sr=buffer.sampleRate;
+  const samples=buffer.getChannelData(0);
+  const len=samples.length;
+  const ab=new ArrayBuffer(44+len*2);
+  const v=new DataView(ab);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,'RIFF');v.setUint32(4,36+len*2,true);ws(8,'WAVE');
+  ws(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);
+  v.setUint16(22,1,true);v.setUint32(24,sr,true);
+  v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+  ws(36,'data');v.setUint32(40,len*2,true);
   let off=44;
   for(let i=0;i<len;i++){
     const s=Math.max(-1,Math.min(1,samples[i]));
-    v.setInt16(off,s<0?s*0x8000:s*0x7FFF,true); off+=2;
+    v.setInt16(off,s<0?s*0x8000:s*0x7FFF,true);off+=2;
   }
   return new Blob([ab],{type:'audio/wav'});
 }
 
-function addLog(en, ja) {
+function addLog(en,ja){
   document.getElementById('logEmpty')?.remove();
-  const body = document.getElementById('logBody');
-  const d = document.createElement('div');
-  d.className = 'log-item';
-  d.innerHTML = `<div class="log-en">${esc(en)}</div><div class="log-ja">${esc(ja)}</div>`;
+  const body=document.getElementById('logBody');
+  const d=document.createElement('div');
+  d.className='log-item';
+  d.innerHTML=`<div class="log-en">${esc(en)}</div><div class="log-ja">${esc(ja)}</div>`;
   body.prepend(d);
 }
-function clearLog() {
-  document.getElementById('logBody').innerHTML = '<div class="log-empty" id="logEmpty">まだ通訳がありません</div>';
+function clearLog(){
+  document.getElementById('logBody').innerHTML='<div class="log-empty" id="logEmpty">まだ通訳がありません</div>';
 }
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-async function startTranslation() {
-  const openaiKey = document.getElementById('openaiKey').value.trim();
-  const claudeKey = document.getElementById('claudeKey').value.trim();
-  if (!openaiKey) { showErr('OpenAI APIキーを入力してください'); return; }
-  if (!claudeKey) { showErr('Anthropic APIキーを入力してください'); return; }
-  if (!audioFile) { showErr('音声ファイルを選択してください'); return; }
+async function startTranslation(){
+  const openaiKey=document.getElementById('openaiKey').value.trim();
+  const claudeKey=document.getElementById('claudeKey').value.trim();
+  if(!openaiKey){showErr('OpenAI APIキーを入力してください');return;}
+  if(!claudeKey){showErr('Anthropic APIキーを入力してください');return;}
+  if(!audioFile){showErr('音声ファイルを選択してください');return;}
   showErr('');
-  shouldStop = false;
-  isRunning = true;
+  shouldStop=false;
+  isRunning=true;
 
-  document.getElementById('startBtn').style.display = 'none';
-  document.getElementById('stopBtn').style.display = 'flex';
-  document.getElementById('progWrap').style.display = 'block';
-  setStatus('on', '音声ファイルを読み込み中...');
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='flex';
+  document.getElementById('progWrap').style.display='block';
+  setStatus('on','音声ファイルを読み込み中...');
 
-  try {
-    const arrayBuf = await audioFile.arrayBuffer();
-    const audioCtx = new AudioContext();
-    const decoded = await audioCtx.decodeAudioData(arrayBuf);
-    const duration = decoded.duration;
-    const sr = decoded.sampleRate;
-    const totalChunks = Math.ceil(duration / CHUNK_SEC);
+  const player=document.getElementById('audioPlayer');
+  player.volume=parseFloat(document.getElementById('origVol').value);
+  player.currentTime=0;
+  player.play();
 
-    for (let i = 0; i < totalChunks; i++) {
-      if (shouldStop) break;
+  try{
+    const arrayBuf=await audioFile.arrayBuffer();
+    const audioCtx=new AudioContext();
+    const decoded=await audioCtx.decodeAudioData(arrayBuf);
+    const sr=decoded.sampleRate;
+    const totalChunks=Math.ceil(decoded.duration/CHUNK_SEC);
 
-      const pct = Math.round((i / totalChunks) * 100);
-      document.getElementById('progFill').style.width = pct + '%';
-      document.getElementById('progLbl').textContent = `${i+1} / ${totalChunks} チャンク (${Math.round((i*CHUNK_SEC)/60)}分${(i*CHUNK_SEC)%60}秒〜)`;
+    for(let i=0;i<totalChunks;i++){
+      if(shouldStop) break;
+      const pct=Math.round((i/totalChunks)*100);
+      document.getElementById('progFill').style.width=pct+'%';
+      document.getElementById('progLbl').textContent=`${i+1}/${totalChunks} (${Math.floor(i*CHUNK_SEC/60)}分${(i*CHUNK_SEC)%60}秒〜)`;
 
-      const startSample = i * CHUNK_SEC * sr;
-      const endSample = Math.min((i+1) * CHUNK_SEC * sr, decoded.length);
-      const chunkLen = endSample - startSample;
+      const startSample=i*CHUNK_SEC*sr;
+      const endSample=Math.min((i+1)*CHUNK_SEC*sr,decoded.length);
+      const chunkLen=endSample-startSample;
 
-      const offCtx = new OfflineAudioContext(1, chunkLen, sr);
-      const src = offCtx.createBufferSource();
-      const chunkBuf = new AudioBuffer({numberOfChannels:1, length:chunkLen, sampleRate:sr});
-      chunkBuf.copyToChannel(decoded.getChannelData(0).slice(startSample, endSample), 0);
-      src.buffer = chunkBuf;
+      const offCtx=new OfflineAudioContext(1,chunkLen,sr);
+      const src=offCtx.createBufferSource();
+      const chunkBuf=new AudioBuffer({numberOfChannels:1,length:chunkLen,sampleRate:sr});
+      chunkBuf.copyToChannel(decoded.getChannelData(0).slice(startSample,endSample),0);
+      src.buffer=chunkBuf;
       src.connect(offCtx.destination);
       src.start();
-      const rendered = await offCtx.startRendering();
-      const wavBlob = audioBufferToWav(rendered);
+      const rendered=await offCtx.startRendering();
+      const wavBlob=audioBufferToWav(rendered);
 
-      setStatus('on', `文字起こし中... (${i+1}/${totalChunks})`);
-      document.getElementById('subOrig').textContent = '文字起こし中...';
-      document.getElementById('subTl').textContent = '翻訳待ち...';
-      document.getElementById('subTl').className = 'sub-tl empty';
+      setStatus('on',`文字起こし中... (${i+1}/${totalChunks})`);
+      document.getElementById('subOrig').textContent='文字起こし中...';
+      document.getElementById('subTl').textContent='翻訳待ち...';
+      document.getElementById('subTl').className='sub-tl empty';
 
       let transcript;
-      try {
-        transcript = await whisperTranscribe(wavBlob, openaiKey);
-      } catch(e) {
-        showErr('Whisperエラー: ' + e.message);
-        break;
-      }
+      try{transcript=await whisperTranscribe(wavBlob,openaiKey);}
+      catch(e){showErr('Whisperエラー: '+e.message);break;}
+      if(!transcript.trim()||shouldStop) continue;
 
-      if (!transcript.trim() || shouldStop) continue;
-
-      setStatus('on', `翻訳中... (${i+1}/${totalChunks})`);
+      setStatus('on',`翻訳中... (${i+1}/${totalChunks})`);
       let translated;
-      try {
-        translated = await claudeTranslate(transcript, claudeKey);
-      } catch(e) {
-        showErr('Claude翻訳エラー: ' + e.message);
-        break;
-      }
+      try{translated=await claudeTranslate(transcript,claudeKey);}
+      catch(e){showErr('翻訳エラー: '+e.message);break;}
+      if(!translated||shouldStop) continue;
 
-      if (!translated || shouldStop) continue;
+      document.getElementById('subOrig').textContent=transcript;
+      const subTl=document.getElementById('subTl');
+      subTl.textContent=translated;
+      subTl.className='sub-tl';
+      addLog(transcript,translated);
 
-      document.getElementById('subOrig').textContent = transcript;
-      const subTl = document.getElementById('subTl');
-      subTl.textContent = translated;
-      subTl.className = 'sub-tl';
-      addLog(transcript, translated);
-
-      setStatus('on', `読み上げ中... (${i+1}/${totalChunks})`);
+      setStatus('on',`読み上げ中... (${i+1}/${totalChunks})`);
       await speak(translated);
     }
 
-    if (!shouldStop) {
-      document.getElementById('progFill').style.width = '100%';
-      document.getElementById('progLbl').textContent = '通訳完了！';
-      setStatus('', '完了しました');
+    if(!shouldStop){
+      document.getElementById('progFill').style.width='100%';
+      document.getElementById('progLbl').textContent='通訳完了！';
+      setStatus('','完了しました');
     } else {
-      setStatus('', '停止しました');
+      setStatus('','停止しました');
     }
-  } catch(e) {
-    showErr('エラー: ' + e.message);
-    setStatus('err', 'エラーが発生しました');
+  } catch(e){
+    showErr('エラー: '+e.message);
+    setStatus('err','エラーが発生しました');
   }
 
-  isRunning = false;
-  document.getElementById('startBtn').style.display = 'flex';
-  document.getElementById('stopBtn').style.display = 'none';
+  isRunning=false;
+  player.pause();
+  document.getElementById('startBtn').style.display='flex';
+  document.getElementById('stopBtn').style.display='none';
 }
 
-function stopTranslation() {
-  shouldStop = true;
+function stopTranslation(){
+  shouldStop=true;
   speechSynthesis.cancel();
-  isRunning = false;
-  document.getElementById('startBtn').style.display = 'flex';
-  document.getElementById('stopBtn').style.display = 'none';
-  setStatus('', '停止しました');
-  document.getElementById('progLbl').textContent = '停止しました';
+  isRunning=false;
+  document.getElementById('audioPlayer').pause();
+  document.getElementById('startBtn').style.display='flex';
+  document.getElementById('stopBtn').style.display='none';
+  setStatus('','停止しました');
+  document.getElementById('progLbl').textContent='停止しました';
 }
 </script>
 </body>
