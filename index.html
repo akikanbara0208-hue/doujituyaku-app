@@ -22,7 +22,7 @@ h1{font-size:22px;font-weight:500;text-align:center;margin-bottom:4px}
 select{width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#f9f8f5;color:#1a1a1a}
 input[type=range]{width:100%;margin-top:4px}
 .vol-row{display:flex;align-items:center;gap:10px;margin-top:10px}
-.vol-row label{font-size:12px;color:#666;white-space:nowrap;min-width:90px}
+.vol-row label{font-size:12px;color:#666;white-space:nowrap;min-width:100px}
 .vol-row input{flex:1}
 .vol-val{font-size:12px;color:#999;min-width:44px;text-align:right}
 .file-area{border:1px dashed #ccc;border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:background .15s;margin-bottom:10px}
@@ -32,17 +32,14 @@ input[type=range]{width:100%;margin-top:4px}
 .file-area p{font-size:13px;color:#888}
 .file-name{font-size:12px;color:#bbb;margin-top:4px}
 .err-box{font-size:12px;color:#a00;background:#fde8e8;border:1px solid #f5b8b8;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:none}
-
-/* 音源プレーヤー */
 .player-wrap{background:#f9f8f5;border:1px solid #e0ddd8;border-radius:10px;padding:12px;margin-bottom:10px;display:none}
 .player-time{display:flex;justify-content:space-between;font-size:11px;color:#aaa;margin-bottom:4px}
 .seek-bar{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:#e0ddd8;border-radius:3px;outline:none;cursor:pointer;margin-bottom:8px}
 .seek-bar::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#2da87a;cursor:pointer}
-.player-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.player-controls{display:flex;align-items:center;gap:10px}
 .player-controls label{font-size:12px;color:#666;white-space:nowrap}
-.player-controls input[type=range]{flex:1;min-width:80px}
+.player-controls input[type=range]{flex:1}
 .player-controls span{font-size:12px;color:#999;white-space:nowrap}
-
 .big-btn{width:100%;height:48px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .15s}
 .big-btn:hover{background:#f5f4f0}
 .big-btn:disabled{opacity:.4;cursor:not-allowed}
@@ -134,14 +131,13 @@ input[type=range]{width:100%;margin-top:4px}
       <p class="file-name" id="fileName">MP3 / M4A / WAV など</p>
     </div>
 
-    <!-- 音源プレーヤー -->
     <div class="player-wrap" id="playerWrap">
       <div class="player-time">
         <span id="curTime">0:00</span>
         <span id="durTime">0:00</span>
       </div>
       <input type="range" class="seek-bar" id="seekBar" value="0" min="0" step="0.1"
-        oninput="onSeek(this.value)" onchange="onSeek(this.value)">
+        onchange="onSeek(this.value)">
       <div class="player-controls">
         <label>再生速度</label>
         <input type="range" id="playRate" min="0.5" max="2.0" step="0.1" value="1.0"
@@ -153,7 +149,7 @@ input[type=range]{width:100%;margin-top:4px}
     <div class="err-box" id="errBox"></div>
     <div style="display:flex;gap:8px">
       <button class="big-btn" id="startBtn" onclick="startTranslation()" disabled>
-        <span>▶️</span><span>通訳開始</span>
+        <span>▶️</span><span id="startLabel">通訳開始</span>
         <span class="dot" id="btnDot" style="display:none"></span>
       </button>
       <button class="big-btn stop-btn" id="stopBtn" onclick="stopTranslation()" style="display:none;width:auto;padding:0 20px">
@@ -194,16 +190,26 @@ input[type=range]{width:100%;margin-top:4px}
 <script>
 const CHUNK_SEC = 10;
 
-// 英語らしいテキストかチェック（数字のみ・記号のみ・短すぎる・拍手系をスキップ）
+// 停止した位置を記憶
+let resumeFromChunk = 0;
+let lastSpoken = '';
+let decodedAudio = null;
+let totalChunks = 0;
+
 function isValidEnglish(text) {
-  if (!text || text.trim().length < 8) return false;
+  if (!text || text.trim().length < 15) return false;
   const t = text.trim();
-  // 英字の割合が60%以上
   const letters = (t.match(/[a-zA-Z]/g) || []).length;
-  if (letters / t.length < 0.4) return false;
-  // 英単語が1つ以上
-  const words = t.split(/\s+/).filter(w => /[a-zA-Z]{2,}/.test(w));
-  return words.length >= 1;
+  if (letters / t.length < 0.5) return false;
+  const words = t.split(/\s+/).filter(w => /[a-zA-Z]{3,}/.test(w));
+  return words.length >= 3;
+}
+
+function isDuplicate(text) {
+  const normalized = text.trim().toLowerCase();
+  if (normalized === lastSpoken) return true;
+  lastSpoken = normalized;
+  return false;
 }
 
 async function claudeTranslate(text, key) {
@@ -218,7 +224,7 @@ async function claudeTranslate(text, key) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 500,
-      system: 'You are a translator. Translate English to Japanese. Return ONLY the Japanese translation text. No comments, no explanations, no extra text whatsoever. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス',
+      system: 'You are a translator. Translate English to Japanese. Return ONLY the Japanese translation. No comments, no extra text. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス, Pritaji→プリタジ, Krishnaji→クリシュナジ',
       messages: [{ role: 'user', content: text }]
     })
   });
@@ -229,14 +235,13 @@ async function claudeTranslate(text, key) {
 
 let voices = [], audioFile = null, shouldStop = false;
 let player = null;
-let seekInterval = null;
 
 window.addEventListener('load', () => {
   const ok = localStorage.getItem('openai_key');
   const ck = localStorage.getItem('claude_key');
   if (ok) document.getElementById('openaiKey').value = ok;
   if (ck) document.getElementById('claudeKey').value = ck;
-  player = document.createElement('audio');
+  player = new Audio();
   player.addEventListener('timeupdate', updateSeekBar);
   player.addEventListener('loadedmetadata', () => {
     document.getElementById('seekBar').max = player.duration;
@@ -254,18 +259,19 @@ function formatTime(sec) {
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
-
 function updateSeekBar() {
   if (!player) return;
-  const bar = document.getElementById('seekBar');
-  bar.value = player.currentTime;
+  document.getElementById('seekBar').value = player.currentTime;
   document.getElementById('curTime').textContent = formatTime(player.currentTime);
 }
-
 function onSeek(val) {
-  if (player) { player.currentTime = parseFloat(val); }
+  if (!player) return;
+  player.currentTime = parseFloat(val);
+  // シーク位置に合わせてチャンク位置も更新
+  if (decodedAudio) {
+    resumeFromChunk = Math.floor(parseFloat(val) / CHUNK_SEC);
+  }
 }
-
 function onPlayRateChange(val) {
   const v = parseFloat(val);
   document.getElementById('playRateVal').textContent = v.toFixed(1) + '×';
@@ -320,12 +326,14 @@ function onFileChange(e) {
   const file = e.target.files[0];
   if (!file) return;
   audioFile = file;
+  resumeFromChunk = 0;
+  decodedAudio = null;
   document.getElementById('fileName').textContent = file.name;
   document.getElementById('startBtn').disabled = false;
+  document.getElementById('startLabel').textContent = '通訳開始';
   document.getElementById('playerWrap').style.display = 'block';
   player.src = URL.createObjectURL(file);
   player.volume = parseFloat(document.getElementById('origVol').value);
-  player.playbackRate = parseFloat(document.getElementById('playRate').value);
   showErr('');
 }
 
@@ -340,11 +348,9 @@ async function whisperTranscribe(blob, key) {
   });
   const d = await res.json();
   if (d.error) throw new Error(d.error.message);
-  // no_speech_prob の平均を計算
   const segs = d.segments || [];
   const avgNoSpeech = segs.length > 0
-    ? segs.reduce((a, s) => a + (s.no_speech_prob || 0), 0) / segs.length
-    : 0;
+    ? segs.reduce((a, s) => a + (s.no_speech_prob || 0), 0) / segs.length : 0;
   return { text: d.text || '', lang: d.language || '', noSpeech: avgNoSpeech };
 }
 
@@ -392,79 +398,89 @@ async function startTranslation() {
 
   player.volume = parseFloat(document.getElementById('origVol').value);
   player.playbackRate = parseFloat(document.getElementById('playRate').value);
-  player.currentTime = 0;
+  player.currentTime = resumeFromChunk * CHUNK_SEC;
   player.play();
 
   try {
-    const ab = await audioFile.arrayBuffer();
-    const ac = new AudioContext();
-    const decoded = await ac.decodeAudioData(ab);
-    const sr = decoded.sampleRate;
-    const total = Math.ceil(decoded.duration / CHUNK_SEC);
+    // 初回のみデコード
+    if (!decodedAudio) {
+      const ab = await audioFile.arrayBuffer();
+      const ac = new AudioContext();
+      decodedAudio = await ac.decodeAudioData(ab);
+      totalChunks = Math.ceil(decodedAudio.duration / CHUNK_SEC);
+    }
 
-    for (let i = 0; i < total; i++) {
-      if (shouldStop) break;
-      const pct = Math.round(i / total * 100);
+    const sr = decodedAudio.sampleRate;
+
+    for (let i = resumeFromChunk; i < totalChunks; i++) {
+      if (shouldStop) {
+        resumeFromChunk = i;
+        break;
+      }
+
+      const pct = Math.round(i / totalChunks * 100);
       document.getElementById('progFill').style.width = pct + '%';
-      const minSec = Math.floor(i * CHUNK_SEC / 60);
-      const sec = (i * CHUNK_SEC) % 60;
-      document.getElementById('progLbl').textContent = `${i + 1}/${total} (${minSec}分${sec}秒〜)`;
+      document.getElementById('progLbl').textContent = `${i + 1}/${totalChunks} (${Math.floor(i * CHUNK_SEC / 60)}分${(i * CHUNK_SEC) % 60}秒〜)`;
 
       const ss = i * CHUNK_SEC * sr;
-      const es = Math.min((i + 1) * CHUNK_SEC * sr, decoded.length);
+      const es = Math.min((i + 1) * CHUNK_SEC * sr, decodedAudio.length);
       const cl = es - ss;
       const oc = new OfflineAudioContext(1, cl, sr);
       const src = oc.createBufferSource();
       const cb = new AudioBuffer({ numberOfChannels: 1, length: cl, sampleRate: sr });
-      cb.copyToChannel(decoded.getChannelData(0).slice(ss, es), 0);
+      cb.copyToChannel(decodedAudio.getChannelData(0).slice(ss, es), 0);
       src.buffer = cb; src.connect(oc.destination); src.start();
       const rendered = await oc.startRendering();
       const wav = audioBufferToWav(rendered);
 
-      setStatus('on', `文字起こし中 ${i + 1}/${total}`);
+      setStatus('on', `文字起こし中 ${i + 1}/${totalChunks}`);
       let result;
       try { result = await whisperTranscribe(wav, ok); }
       catch (e) { showErr('Whisperエラー: ' + e.message); break; }
 
       const { text, lang, noSpeech } = result;
-
       if (!text.trim() || shouldStop) continue;
 
+      // 無音・拍手・音楽は確実にスキップ
+      if (noSpeech > 0.4) continue;
+
       if (lang === 'japanese') {
+        if (isDuplicate(text)) continue;
         document.getElementById('subOrig').textContent = text;
         document.getElementById('subTl').textContent = text;
         document.getElementById('subTl').className = 'sub-tl';
         addLog(text, text);
-        setStatus('on', `日本語読み上げ中 ${i + 1}/${total}`);
+        setStatus('on', `日本語読み上げ中 ${i + 1}/${totalChunks}`);
         await speak(text);
         continue;
       }
 
       if (lang !== 'english') continue;
       if (!isValidEnglish(text)) continue;
+      if (isDuplicate(text)) continue;
 
-      setStatus('on', `翻訳中 ${i + 1}/${total}`);
+      setStatus('on', `翻訳中 ${i + 1}/${totalChunks}`);
       let tl;
       try { tl = await claudeTranslate(text, ck); }
       catch (e) { showErr('翻訳エラー: ' + e.message); break; }
       if (!tl || shouldStop) continue;
+      if (isDuplicate(tl)) continue;
 
       document.getElementById('subOrig').textContent = text;
       document.getElementById('subTl').textContent = tl;
       document.getElementById('subTl').className = 'sub-tl';
       addLog(text, tl);
 
-      if (isDuplicate(tl)) continue;
-      setStatus('on', `読み上げ中 ${i + 1}/${total}`);
+      setStatus('on', `読み上げ中 ${i + 1}/${totalChunks}`);
       await speak(tl);
     }
 
     if (!shouldStop) {
+      resumeFromChunk = 0;
       document.getElementById('progFill').style.width = '100%';
       document.getElementById('progLbl').textContent = '完了！';
+      document.getElementById('startLabel').textContent = '通訳開始';
       setStatus('', '完了しました');
-    } else {
-      setStatus('', '停止しました');
     }
   } catch (e) {
     showErr('エラー: ' + e.message);
@@ -482,9 +498,10 @@ function stopTranslation() {
   speechSynthesis.cancel();
   player.pause();
   document.getElementById('startBtn').style.display = 'flex';
+  document.getElementById('startLabel').textContent = '▶ 続きから再開';
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('btnDot').style.display = 'none';
-  setStatus('', '停止しました');
+  setStatus('', '停止中 — 続きから再開できます');
   document.getElementById('progLbl').textContent = '停止しました';
 }
 </script>
