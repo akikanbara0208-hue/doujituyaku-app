@@ -19,7 +19,6 @@ h1{font-size:22px;font-weight:500;text-align:center;margin-bottom:4px}
 .key-row input{flex:1;font-size:12px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#f9f8f5;font-family:monospace;color:#1a1a1a}
 .show-btn{font-size:11px;color:#888;background:none;border:1px solid #ddd;border-radius:6px;padding:6px 8px;cursor:pointer;white-space:nowrap}
 .show-btn:hover{background:#f0ede8}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 select{width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#f9f8f5;color:#1a1a1a}
 input[type=range]{width:100%;margin-top:6px}
 .rv{margin-left:4px;font-weight:400;color:#999}
@@ -91,7 +90,7 @@ input[type=range]{width:100%;margin-top:6px}
   </div>
 
   <div class="card">
-    <div class="card-label">音量設定</div>
+    <div class="card-label">音量・速度設定</div>
     <div class="vol-row">
       <label>元音声</label>
       <input type="range" id="origVol" min="0" max="1" step="0.05" value="0.4"
@@ -169,7 +168,18 @@ input[type=range]{width:100%;margin-top:6px}
 <script>
 const CHUNK_SEC = 30;
 
-// Claudeには翻訳のみ要求。余計なことを言わせない
+// 英語らしいテキストかどうかを判定
+function isValidEnglish(text) {
+  if (!text || text.trim().length < 10) return false;
+  // 英字の割合が50%以上であること
+  const letters = (text.match(/[a-zA-Z]/g) || []).length;
+  const ratio = letters / text.length;
+  if (ratio < 0.5) return false;
+  // 英単語が3つ以上含まれること
+  const words = text.trim().split(/\s+/).filter(w => /[a-zA-Z]{2,}/.test(w));
+  return words.length >= 3;
+}
+
 async function claudeTranslate(text, key) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -182,7 +192,7 @@ async function claudeTranslate(text, key) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
-      system: 'あなたは翻訳専門AIです。ユーザーから英語テキストが来たら、日本語訳のみを返してください。感想・説明・コメントは一切禁止です。専門用語：Deeksha→ディークシャ、Awakening→覚醒、Enlightenment→悟り、Oneness→ワンネス、The Divine→神聖なるもの、Liberation/Mukti→解放・ムクティ、Golden City→ゴールデンシティ、Sri Amma→シュリ・アンマ、Sri Bhagavan→シュリ・バガヴァン、Consciousness→意識、Grace→恩寵、Surrender→委ねる、Presence→プレゼンス',
+      system: 'You are a translator. Translate the English text to Japanese. Return ONLY the Japanese translation. No comments, no explanations. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス',
       messages: [{ role: 'user', content: text }]
     })
   });
@@ -349,10 +359,11 @@ async function startTranslation() {
       catch (e) { showErr('Whisperエラー: ' + e.message); break; }
 
       const { text, lang } = result;
-      if (!text.trim() || shouldStop) continue;
 
-      // 英語のみ翻訳、それ以外は完全スキップ
+      // 英語判定：Whisperのlangが"english"かつ英語らしいテキストのみ翻訳
       if (lang !== 'english') continue;
+      if (!isValidEnglish(text)) continue;
+      if (shouldStop) break;
 
       setStatus('on', `翻訳中 ${i + 1}/${total}`);
       let tl;
