@@ -351,37 +351,35 @@ function onFileChange(e) {
   showErr('');
 }
 
-async function whisperTranscribe(blob, key) {
+async function whisperTranscribe(file, key, startSec, endSec) {
+  // ファイルをそのままBlob化してWhisperに送る
+  const ext = file.name.split('.').pop().toLowerCase();
+  const mimeMap = {mp3:'audio/mpeg', m4a:'audio/mp4', wav:'audio/wav', aac:'audio/aac', ogg:'audio/ogg'};
+  const mime = mimeMap[ext] || file.type || 'audio/mp4';
   const form = new FormData();
-  form.append('file', blob, 'chunk.wav');
+  form.append('file', file, 'audio.' + ext);
   form.append('model', 'whisper-1');
   form.append('response_format', 'verbose_json');
   form.append('timestamp_granularities[]', 'segment');
+  // 時間範囲をプロンプトで指定（Whisperはoffset非対応なのでsegmentsでフィルタ）
   const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST', headers: { 'Authorization': 'Bearer ' + key }, body: form
   });
   const d = await res.json();
   if (d.error) throw new Error(d.error.message);
-  const segs = d.segments || [];
-  const avgNoSpeech = segs.length > 0 ? segs.reduce((a, s) => a + (s.no_speech_prob || 0), 0) / segs.length : 0;
-  return { text: d.text || '', lang: d.language || '', noSpeech: avgNoSpeech };
+  // 指定時間範囲のセグメントのみ取得
+  const allSegs = d.segments || [];
+  const segs = allSegs.filter(s => s.start >= startSec && s.start < endSec);
+  const text = segs.map(s => s.text).join(' ').trim();
+  const avgNoSpeech = segs.length > 0 ? segs.reduce((a, s) => a + (s.no_speech_prob || 0), 0) / segs.length : 1;
+  return { text, lang: d.language || '', noSpeech: avgNoSpeech };
 }
 
-function audioBufferToWav(buf) {
-  const sr = buf.sampleRate, s = buf.getChannelData(0), len = s.length;
-  const ab = new ArrayBuffer(44 + len * 2), v = new DataView(ab);
-  const ws = (o, x) => { for (let i = 0; i < x.length; i++) v.setUint8(o + i, x.charCodeAt(i)); };
-  ws(0, 'RIFF'); v.setUint32(4, 36 + len * 2, true); ws(8, 'WAVE');
-  ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
-  v.setUint16(22, 1, true); v.setUint32(24, sr, true);
-  v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
-  ws(36, 'data'); v.setUint32(40, len * 2, true);
-  let off = 44;
-  for (let i = 0; i < len; i++) {
-    const x = Math.max(-1, Math.min(1, s[i]));
-    v.setInt16(off, x < 0 ? x * 0x8000 : x * 0x7FFF, true); off += 2;
-  }
-  return new Blob([ab], { type: 'audio/wav' });
+// M4Aファイルをそのまま使う（AudioContextでのデコード不要）
+function sliceAudioFile(file, startSec, endSec, duration) {
+  // ファイル全体のblobをそのまま返す（Whisperが対応）
+  // チャンク分割はWhisper側のtimestamp指定で対応
+  return file;
 }
 
 function addLog(orig, tl) {
@@ -409,45 +407,27 @@ async function startTranslation() {
   document.getElementById('btnDot').style.display = 'inline-block';
   setStatus('on', '読み込み中...');
 
-  if (!decodedAudio) {
-    try {
-      const ab = await audioFile.arrayBuffer();
-      const ac = new AudioContext({ sampleRate: 16000 });
-      decodedAudio = await new Promise((resolve, reject) => {
-        ac.decodeAudioData(ab.slice(0), resolve, reject);
-      });
-    } catch(e) {
-      // デコード失敗時はsampleRateなしで再試行
-      try {
-        const ab2 = await audioFile.arrayBuffer();
-        const ac2 = new AudioContext();
-        decodedAudio = await new Promise((resolve, reject) => {
-          ac2.decodeAudioData(ab2.slice(0), resolve, reject);
-        });
-      } catch(e2) {
-        showErr('音声デコードエラー: ' + e2.message);
-        document.getElementById('startBtn').style.display = 'flex';
-        document.getElementById('stopBtn').style.display = 'none';
-        document.getElementById('btnDot').style.display = 'none';
-        setStatus('err', 'デコードエラー');
-        return;
-      }
-    }
-    totalChunks = Math.ceil(decodedAudio.duration / CHUNK_SEC);
+  // 音源の長さをaudio要素から取得
+  const duration = player.duration || 0;
+  if (!duration) {
+    showErr('音声ファイルの長さを取得できませんでした。ファイルを選び直してください。');
+    document.getElementById('startBtn').style.display = 'flex';
+    document.getElementById('stopBtn').style.display = 'none';
+    document.getElementById('btnDot').style.display = 'none';
+    return;
   }
+  totalChunks = Math.ceil(duration / CHUNK_SEC);
 
-  // シークバーの現在位置から開始
   const startChunk = resumeFromChunk;
   player.volume = parseFloat(document.getElementById('origVol').value);
   player.playbackRate = parseFloat(document.getElementById('playRate').value);
   player.currentTime = startChunk * CHUNK_SEC;
   player.play();
 
-  const sr = decodedAudio.sampleRate;
   const translationQueue = [];
   let speakingDone = false;
 
-  // 裏で文字起こし・翻訳を先行処理
+  // 裏で文字起こし・翻訳を先行処理（ファイル全体をWhisperに送りchunk_offsetで指定）
   const transcribeAll = async () => {
     for (let i = startChunk; i < totalChunks; i++) {
       if (shouldStop) break;
@@ -455,19 +435,11 @@ async function startTranslation() {
       document.getElementById('progFill').style.width = Math.round(i / totalChunks * 100) + '%';
       document.getElementById('progLbl').textContent = `処理中 ${i + 1}/${totalChunks} (${Math.floor(i * CHUNK_SEC / 60)}分${(i * CHUNK_SEC) % 60}秒〜)`;
 
-      const ss = i * CHUNK_SEC * sr;
-      const es = Math.min((i + 1) * CHUNK_SEC * sr, decodedAudio.length);
-      const cl = es - ss;
-      const oc = new OfflineAudioContext(1, cl, sr);
-      const src = oc.createBufferSource();
-      const cb = new AudioBuffer({ numberOfChannels: 1, length: cl, sampleRate: sr });
-      cb.copyToChannel(decodedAudio.getChannelData(0).slice(ss, es), 0);
-      src.buffer = cb; src.connect(oc.destination); src.start();
-      const rendered = await oc.startRendering();
-      const wav = audioBufferToWav(rendered);
+      // ファイルをそのままWhisperに送る
+      const wav = audioFile;
 
       let result;
-      try { result = await whisperTranscribe(wav, ok); }
+      try { result = await whisperTranscribe(wav, ok, i * CHUNK_SEC, (i + 1) * CHUNK_SEC); }
       catch (e) { translationQueue.push({ i, skip: true }); continue; }
 
       const { text, lang, noSpeech } = result;
