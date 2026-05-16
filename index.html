@@ -490,7 +490,7 @@ async function startTranslation() {
       catch (e) { translationQueue.push({ i, skip: true }); continue; }
 
       const { text, lang, noSpeech } = result;
-      if (noSpeech > 0.6 || !text.trim()) { translationQueue.push({ i, skip: true }); continue; }
+      if (!text.trim()) { translationQueue.push({ i, skip: true }); continue; }
 
       if (lang === 'japanese') {
         translationQueue.push({ i, text, tl: text, lang: 'japanese' });
