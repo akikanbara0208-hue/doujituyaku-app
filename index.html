@@ -410,9 +410,29 @@ async function startTranslation() {
   setStatus('on', '読み込み中...');
 
   if (!decodedAudio) {
-    const ab = await audioFile.arrayBuffer();
-    const ac = new AudioContext();
-    decodedAudio = await ac.decodeAudioData(ab);
+    try {
+      const ab = await audioFile.arrayBuffer();
+      const ac = new AudioContext({ sampleRate: 16000 });
+      decodedAudio = await new Promise((resolve, reject) => {
+        ac.decodeAudioData(ab.slice(0), resolve, reject);
+      });
+    } catch(e) {
+      // デコード失敗時はsampleRateなしで再試行
+      try {
+        const ab2 = await audioFile.arrayBuffer();
+        const ac2 = new AudioContext();
+        decodedAudio = await new Promise((resolve, reject) => {
+          ac2.decodeAudioData(ab2.slice(0), resolve, reject);
+        });
+      } catch(e2) {
+        showErr('音声デコードエラー: ' + e2.message);
+        document.getElementById('startBtn').style.display = 'flex';
+        document.getElementById('stopBtn').style.display = 'none';
+        document.getElementById('btnDot').style.display = 'none';
+        setStatus('err', 'デコードエラー');
+        return;
+      }
+    }
     totalChunks = Math.ceil(decodedAudio.duration / CHUNK_SEC);
   }
 
