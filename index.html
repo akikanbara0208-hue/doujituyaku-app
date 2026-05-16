@@ -22,7 +22,7 @@ h1{font-size:22px;font-weight:500;text-align:center;margin-bottom:4px}
 select{width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#f9f8f5;color:#1a1a1a}
 input[type=range]{width:100%;margin-top:4px}
 .vol-row{display:flex;align-items:center;gap:10px;margin-top:10px}
-.vol-row label{font-size:12px;color:#666;white-space:nowrap;min-width:100px}
+.vol-row label{font-size:12px;color:#666;white-space:nowrap;min-width:110px}
 .vol-row input{flex:1}
 .vol-val{font-size:12px;color:#999;min-width:44px;text-align:right}
 .file-area{border:1px dashed #ccc;border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:background .15s;margin-bottom:10px}
@@ -124,7 +124,7 @@ input[type=range]{width:100%;margin-top:4px}
   <div class="card">
     <div class="card-label">音声ファイル</div>
     <div class="file-area" onclick="document.getElementById('fileInput').click()">
-      <input type="file" id="fileInput" accept="audio/*,.m4a,.M4A,.mp3,.MP3,.wav,.WAV,.aac,.AAC" onchange="onFileChange(event)">
+      <input type="file" id="fileInput" accept="audio/*" onchange="onFileChange(event)">
       <div class="icon">🎵</div>
       <p>クリックして音声ファイルを選択</p>
       <p class="file-name" id="fileName">MP3 / M4A / WAV など</p>
@@ -185,11 +185,13 @@ input[type=range]{width:100%;margin-top:4px}
 </div>
 
 <script>
-const CHUNK_SEC = 10;
+// M4Aをそのままスライスして送る方式（AudioContextデコード不要）
+const CHUNK_BYTES = 1024 * 1024; // 1MB per chunk（Whisperに送るバイト単位の区切り）
+const CHUNK_SEC = 30; // 目標秒数（時間ベースのシーク用）
 const SYSTEM = 'You are a translator. Translate English to Japanese. Return ONLY the Japanese translation. No English, no comments. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス, Pritaji→プリタジ, Krishnaji→クリシュナジ';
 
 let voices=[], audioFile=null, shouldStop=false, player=null;
-let decodedAudio=null, totalChunks=0, resumeChunk=0;
+let fileArrayBuffer=null, resumeChunk=0, totalChunks=0;
 
 window.addEventListener('load',()=>{
   const ok=localStorage.getItem('openai_key');
@@ -218,8 +220,8 @@ document.addEventListener('input',e=>{
 });
 
 function fmt(s){return Math.floor(s/60)+':'+(Math.floor(s%60)).toString().padStart(2,'0');}
-function onSeek(v){if(player){player.currentTime=parseFloat(v);resumeChunk=Math.floor(parseFloat(v)/CHUNK_SEC);}}
-function skipTime(s){if(!player)return;const t=Math.max(0,Math.min(player.currentTime+s,player.duration||0));player.currentTime=t;seekBar.value=t;resumeChunk=Math.floor(t/CHUNK_SEC);}
+function onSeek(v){if(player){player.currentTime=parseFloat(v);}}
+function skipTime(s){if(!player)return;const t=Math.max(0,Math.min(player.currentTime+s,player.duration||0));player.currentTime=t;seekBar.value=t;}
 function toggleVis(id,btn){const el=document.getElementById(id);el.type=el.type==='password'?'text':'password';btn.textContent=el.type==='password'?'表示':'隠す';}
 function setStatus(cls,msg){stxt.textContent=msg;sdot.className='sdot'+(cls?' '+cls:'');}
 function showErr(msg){errBox.textContent=msg;errBox.style.display=msg?'block':'none';}
@@ -259,8 +261,8 @@ function onFileChange(e){
   const file=e.target.files[0];
   if(!file) return;
   audioFile=file;
+  fileArrayBuffer=null;
   resumeChunk=0;
-  decodedAudio=null;
   fileName.textContent=file.name;
   startBtn.disabled=false;
   startLabel.textContent='通訳開始';
@@ -271,14 +273,19 @@ function onFileChange(e){
   showErr('');
 }
 
-async function whisperTranscribe(blob,key){
+// M4Aをそのままバイト列でスライスしてWavとして送るのではなく、
+// M4Aのバイナリをそのままm4aとして送る（Whisperはm4aをサポート）
+async function whisperTranscribe(blob, openaiKey){
   const form=new FormData();
-  form.append('file',blob,'chunk.wav');
+  // ファイル名にm4a拡張子をつけることでWhisperがフォーマット認識する
+  const ext=audioFile.name.split('.').pop().toLowerCase();
+  const mimeMap={'m4a':'audio/mp4','mp3':'audio/mpeg','wav':'audio/wav','aac':'audio/aac','ogg':'audio/ogg','flac':'audio/flac'};
+  const mime=mimeMap[ext]||'audio/mp4';
+  form.append('file', blob, 'audio.'+ext);
   form.append('model','whisper-1');
   form.append('response_format','verbose_json');
-  form.append('timestamp_granularities[]','segment');
   const res=await fetch('https://api.openai.com/v1/audio/transcriptions',{
-    method:'POST',headers:{'Authorization':'Bearer '+key},body:form
+    method:'POST',headers:{'Authorization':'Bearer '+openaiKey},body:form
   });
   const d=await res.json();
   if(d.error) throw new Error(d.error.message);
@@ -296,20 +303,6 @@ async function claudeTranslate(text,key){
   const d=await res.json();
   if(d.error) throw new Error(d.error.message);
   return d.content?.[0]?.text?.trim()||'';
-}
-
-function audioBufferToWav(buf){
-  const sr=buf.sampleRate,s=buf.getChannelData(0),len=s.length;
-  const ab=new ArrayBuffer(44+len*2),v=new DataView(ab);
-  const ws=(o,x)=>{for(let i=0;i<x.length;i++)v.setUint8(o+i,x.charCodeAt(i));};
-  ws(0,'RIFF');v.setUint32(4,36+len*2,true);ws(8,'WAVE');
-  ws(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);
-  v.setUint16(22,1,true);v.setUint32(24,sr,true);
-  v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
-  ws(36,'data');v.setUint32(40,len*2,true);
-  let off=44;
-  for(let i=0;i<len;i++){const x=Math.max(-1,Math.min(1,s[i]));v.setInt16(off,x<0?x*0x8000:x*0x7FFF,true);off+=2;}
-  return new Blob([ab],{type:'audio/wav'});
 }
 
 function addLog(orig,tl){
@@ -334,49 +327,47 @@ async function startTranslation(){
   stopBtn.style.display='flex';
   progWrap.style.display='block';
   btnDot.style.display='inline-block';
-  setStatus('on','読み込み中...');
+  setStatus('on','ファイル読み込み中...');
 
-  // 先にデコード
-  if(!decodedAudio){
-    try{
-      const ab=await audioFile.arrayBuffer();
-      const ac=new AudioContext();
-      decodedAudio=await ac.decodeAudioData(ab);
-      totalChunks=Math.ceil(decodedAudio.duration/CHUNK_SEC);
-    }catch(e){
-      showErr('音声デコードエラー: '+e.message);
-      startBtn.style.display='flex';stopBtn.style.display='none';btnDot.style.display='none';
-      setStatus('err','デコードエラー');return;
-    }
+  // ArrayBufferとして読み込む（AudioContextは使わない）
+  if(!fileArrayBuffer){
+    fileArrayBuffer=await audioFile.arrayBuffer();
   }
 
-  // シークバー位置から再生開始
+  // バイトサイズでチャンク分割
+  const totalBytes=fileArrayBuffer.byteLength;
+  totalChunks=Math.ceil(totalBytes/CHUNK_BYTES);
+
+  // シーク位置から再開（おおよそのバイト位置）
+  const startChunk=resumeChunk;
+
+  // 元音声を再生
   player.volume=parseFloat(origVol.value);
   player.playbackRate=parseFloat(playRate.value);
-  player.currentTime=resumeChunk*CHUNK_SEC;
-  player.play();
+  // おおよその再生位置（バイト比率）
+  if(player.duration&&startChunk>0){
+    player.currentTime=player.duration*(startChunk/totalChunks);
+  }
+  player.play().catch(()=>{});
 
-  const sr=decodedAudio.sampleRate;
-
-  for(let i=resumeChunk;i<totalChunks;i++){
+  for(let i=startChunk;i<totalChunks;i++){
     if(shouldStop){resumeChunk=i;break;}
-    progFill.style.width=Math.round(i/totalChunks*100)+'%';
-    progLbl.textContent=`${i+1}/${totalChunks} (${Math.floor(i*CHUNK_SEC/60)}分${(i*CHUNK_SEC)%60}秒〜)`;
+    
+    const pct=Math.round(i/totalChunks*100);
+    progFill.style.width=pct+'%';
+    progLbl.textContent=`${i+1}/${totalChunks} チャンク処理中...`;
 
-    const ss=i*CHUNK_SEC*sr;
-    const es=Math.min((i+1)*CHUNK_SEC*sr,decodedAudio.length);
-    const cl=es-ss;
-    const oc=new OfflineAudioContext(1,cl,sr);
-    const src=oc.createBufferSource();
-    const cb=new AudioBuffer({numberOfChannels:1,length:cl,sampleRate:sr});
-    cb.copyToChannel(decodedAudio.getChannelData(0).slice(ss,es),0);
-    src.buffer=cb;src.connect(oc.destination);src.start();
-    const rendered=await oc.startRendering();
-    const wav=audioBufferToWav(rendered);
+    const start=i*CHUNK_BYTES;
+    const end=Math.min((i+1)*CHUNK_BYTES,totalBytes);
+    const chunk=fileArrayBuffer.slice(start,end);
+    const ext=audioFile.name.split('.').pop().toLowerCase();
+    const mimeMap={'m4a':'audio/mp4','mp3':'audio/mpeg','wav':'audio/wav','aac':'audio/aac'};
+    const mime=mimeMap[ext]||'audio/mp4';
+    const blob=new Blob([chunk],{type:mime});
 
     setStatus('on',`文字起こし中 ${i+1}/${totalChunks}`);
     let result;
-    try{result=await whisperTranscribe(wav,ok);}
+    try{result=await whisperTranscribe(blob,ok);}
     catch(e){showErr('Whisperエラー: '+e.message);break;}
 
     const{text,lang,noSpeech}=result;
@@ -394,12 +385,6 @@ async function startTranslation(){
     subTl.textContent=tl;
     subTl.className='sub-tl';
     addLog(text,tl);
-
-    // 音源の位置に合わせて待機
-    const chunkEnd=(i+1)*CHUNK_SEC;
-    if(player.currentTime<chunkEnd){
-      await new Promise(r=>setTimeout(r,(chunkEnd-player.currentTime)*1000/parseFloat(playRate.value)));
-    }
 
     setStatus('on',`読み上げ中 ${i+1}/${totalChunks}`);
     await speak(tl);
@@ -424,7 +409,6 @@ function stopTranslation(){
   shouldStop=true;
   speechSynthesis.cancel();
   player.pause();
-  resumeChunk=Math.floor(player.currentTime/CHUNK_SEC);
   startBtn.style.display='flex';
   startLabel.textContent='▶ 続きから再開';
   stopBtn.style.display='none';
