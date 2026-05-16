@@ -251,6 +251,18 @@ window.addEventListener('load', () => {
   });
 });
 
+// AudioContextをユーザー操作時に事前作成
+let sharedAudioContext = null;
+function getAudioContext() {
+  if (!sharedAudioContext) {
+    sharedAudioContext = new AudioContext();
+  }
+  if (sharedAudioContext.state === 'suspended') {
+    sharedAudioContext.resume();
+  }
+  return sharedAudioContext;
+}
+
 document.addEventListener('input', e => {
   if (e.target.id === 'openaiKey') localStorage.setItem('openai_key', e.target.value);
   if (e.target.id === 'claudeKey') localStorage.setItem('claude_key', e.target.value);
@@ -336,6 +348,8 @@ function onFileChange(e) {
   audioFile = file;
   resumeFromChunk = 0;
   decodedAudio = null;
+  // ユーザー操作のタイミングでAudioContextを起動
+  getAudioContext();
   document.getElementById('fileName').textContent = file.name;
   document.getElementById('startBtn').disabled = false;
   document.getElementById('startLabel').textContent = '通訳開始';
@@ -452,7 +466,7 @@ async function startTranslation() {
   if (!decodedAudio) {
     try {
       const ab = await audioFile.arrayBuffer();
-      const ac = new AudioContext();
+      const ac = getAudioContext();
       decodedAudio = await ac.decodeAudioData(ab);
     } catch(e) {
       showErr('M4Aのデコードに失敗しました。ファイルをMP3に変換してお試しください。変換サイト: cloudconvert.com/m4a-to-mp3');
@@ -478,7 +492,7 @@ async function startTranslation() {
       const ss = i * CHUNK_SEC * sr;
       const es = Math.min((i + 1) * CHUNK_SEC * sr, decodedAudio.length);
       const cl = es - ss;
-      const oc = new OfflineAudioContext(1, cl, sr);
+      const oc = new OfflineAudioContext(1, cl, sr || 44100);
       const src = oc.createBufferSource();
       const cb = new AudioBuffer({ numberOfChannels: 1, length: cl, sampleRate: sr });
       cb.copyToChannel(decodedAudio.getChannelData(0).slice(ss, es), 0);
