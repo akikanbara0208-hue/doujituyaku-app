@@ -15,10 +15,6 @@ h1{font-size:22px;font-weight:500;text-align:center;margin-bottom:4px}
 .vf{margin-bottom:10px}
 .vf label{font-size:12px;color:#666;display:block;margin-bottom:4px}
 .vf:last-child{margin-bottom:0}
-.key-row{display:flex;align-items:center;gap:6px}
-.key-row input{flex:1;font-size:12px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#f9f8f5;font-family:monospace;color:#1a1a1a}
-.show-btn{font-size:11px;color:#888;background:none;border:1px solid #ddd;border-radius:6px;padding:6px 8px;cursor:pointer;white-space:nowrap}
-.show-btn:hover{background:#f0ede8}
 select{width:100%;font-size:13px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#f9f8f5;color:#1a1a1a}
 input[type=range]{width:100%;margin-top:4px}
 .vol-row{display:flex;align-items:center;gap:10px;margin-top:10px}
@@ -32,13 +28,16 @@ input[type=range]{width:100%;margin-top:4px}
 .file-area p{font-size:13px;color:#888}
 .file-name{font-size:12px;color:#bbb;margin-top:4px}
 .err-box{font-size:12px;color:#a00;background:#fde8e8;border:1px solid #f5b8b8;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:none}
+.server-box{font-size:12px;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:10px 12px;margin-bottom:10px}
+.server-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ccc;margin-right:6px}
+.server-dot.on{background:#2da87a}
+.server-dot.off{background:#e24b4a}
 .player-wrap{background:#f9f8f5;border:1px solid #e0ddd8;border-radius:10px;padding:12px;margin-bottom:10px;display:none}
 .player-time{display:flex;justify-content:space-between;font-size:11px;color:#aaa;margin-bottom:4px}
 .seek-bar{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:#e0ddd8;border-radius:3px;outline:none;cursor:pointer;margin-bottom:8px}
 .seek-bar::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#2da87a;cursor:pointer}
 .skip-btns{display:flex;justify-content:center;gap:12px}
 .skip-btn{font-size:12px;padding:5px 14px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer}
-.skip-btn:hover{background:#f0ede8}
 .big-btn{width:100%;height:48px;border-radius:10px;border:1px solid #ddd;background:#fff;color:#1a1a1a;font-size:15px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .15s}
 .big-btn:hover{background:#f5f4f0}
 .big-btn:disabled{opacity:.4;cursor:not-allowed}
@@ -78,20 +77,13 @@ input[type=range]{width:100%;margin-top:4px}
   <p class="hero-sub">英語音声を日本語に翻訳・読み上げします</p>
 
   <div class="card">
-    <div class="card-label">APIキー設定</div>
-    <div class="vf">
-      <label>OpenAI APIキー（Whisper用）</label>
-      <div class="key-row">
-        <input type="password" id="openaiKey" placeholder="sk-...">
-        <button class="show-btn" onclick="toggleVis('openaiKey',this)">表示</button>
-      </div>
+    <div class="card-label">サーバー状態</div>
+    <div class="server-box">
+      <span class="server-dot" id="serverDot"></span>
+      <span id="serverStatus">確認中...</span>
     </div>
-    <div class="vf">
-      <label>Anthropic APIキー（Claude翻訳用）</label>
-      <div class="key-row">
-        <input type="password" id="claudeKey" placeholder="sk-ant-...">
-        <button class="show-btn" onclick="toggleVis('claudeKey',this)">表示</button>
-      </div>
+    <div style="font-size:11px;color:#888;margin-top:6px">
+      PowerShellで <code>cd "$env:USERPROFILE\Downloads" ; python server.py</code> を実行してください
     </div>
   </div>
 
@@ -129,7 +121,6 @@ input[type=range]{width:100%;margin-top:4px}
       <p>クリックして音声ファイルを選択</p>
       <p class="file-name" id="fileName">MP3 / M4A / WAV など</p>
     </div>
-
     <div class="player-wrap" id="playerWrap">
       <div class="player-time">
         <span id="curTime">0:00</span>
@@ -142,7 +133,6 @@ input[type=range]{width:100%;margin-top:4px}
         <button class="skip-btn" onclick="skipTime(15)">15秒 ▶</button>
       </div>
     </div>
-
     <div class="err-box" id="errBox"></div>
     <div style="display:flex;gap:8px">
       <button class="big-btn" id="startBtn" onclick="startTranslation()" disabled>
@@ -186,16 +176,29 @@ input[type=range]{width:100%;margin-top:4px}
 
 <script>
 const CHUNK_SEC = 30;
+const SERVER = 'http://localhost:5500';
 const SYSTEM = 'You are a translator. Translate English to Japanese. Return ONLY the Japanese translation. No English, no comments. Terminology: Deeksha→ディークシャ, Awakening→覚醒, Enlightenment→悟り, Oneness→ワンネス, The Divine→神聖なるもの, Liberation/Mukti→解放・ムクティ, Golden City→ゴールデンシティ, Sri Amma→シュリ・アンマ, Sri Bhagavan→シュリ・バガヴァン, Consciousness→意識, Grace→恩寵, Surrender→委ねる, Presence→プレゼンス, Pritaji→プリタジ, Krishnaji→クリシュナジ';
 
 let voices=[], audioFile=null, shouldStop=false, player=null;
 let decodedAudio=null, totalChunks=0, resumeChunk=0;
 
+// サーバー状態確認
+async function checkServer(){
+  try{
+    await fetch(SERVER+'/whisper',{method:'OPTIONS'});
+    serverDot.className='server-dot on';
+    serverStatus.textContent='サーバー接続済み — 使用できます';
+    startBtn.disabled=!audioFile;
+  }catch(e){
+    serverDot.className='server-dot off';
+    serverStatus.textContent='サーバー未起動 — PowerShellでserver.pyを実行してください';
+    startBtn.disabled=true;
+  }
+}
+checkServer();
+setInterval(checkServer, 5000);
+
 window.addEventListener('load',()=>{
-  const ok=localStorage.getItem('openai_key');
-  const ck=localStorage.getItem('claude_key');
-  if(ok) openaiKey.value=ok;
-  if(ck) claudeKey.value=ck;
   const ov=localStorage.getItem('orig_vol');
   const tv=localStorage.getItem('tts_vol');
   const pr=localStorage.getItem('play_rate');
@@ -203,24 +206,13 @@ window.addEventListener('load',()=>{
   if(tv){ttsVol.value=tv;ttsVolVal.textContent=Math.round(tv*100)+'%';}
   if(pr){playRate.value=pr;playRateVal.textContent=parseFloat(pr).toFixed(1)+'×';}
   player=new Audio();
-  player.addEventListener('timeupdate',()=>{
-    seekBar.value=player.currentTime;
-    curTime.textContent=fmt(player.currentTime);
-  });
-  player.addEventListener('loadedmetadata',()=>{
-    seekBar.max=player.duration;
-    durTime.textContent=fmt(player.duration);
-  });
-});
-document.addEventListener('input',e=>{
-  if(e.target.id==='openaiKey') localStorage.setItem('openai_key',e.target.value);
-  if(e.target.id==='claudeKey') localStorage.setItem('claude_key',e.target.value);
+  player.addEventListener('timeupdate',()=>{seekBar.value=player.currentTime;curTime.textContent=fmt(player.currentTime);});
+  player.addEventListener('loadedmetadata',()=>{seekBar.max=player.duration;durTime.textContent=fmt(player.duration);});
 });
 
 function fmt(s){return Math.floor(s/60)+':'+(Math.floor(s%60)).toString().padStart(2,'0');}
 function onSeek(v){if(player){player.currentTime=parseFloat(v);resumeChunk=Math.floor(parseFloat(v)/CHUNK_SEC);}}
 function skipTime(s){if(!player)return;const t=Math.max(0,Math.min(player.currentTime+s,player.duration||0));player.currentTime=t;seekBar.value=t;resumeChunk=Math.floor(t/CHUNK_SEC);}
-function toggleVis(id,btn){const el=document.getElementById(id);el.type=el.type==='password'?'text':'password';btn.textContent=el.type==='password'?'表示':'隠す';}
 function setStatus(cls,msg){stxt.textContent=msg;sdot.className='sdot'+(cls?' '+cls:'');}
 function showErr(msg){errBox.textContent=msg;errBox.style.display=msg?'block':'none';}
 
@@ -262,23 +254,20 @@ function onFileChange(e){
   resumeChunk=0;
   decodedAudio=null;
   fileName.textContent=file.name;
-  startBtn.disabled=false;
-  startLabel.textContent='通訳開始';
   playerWrap.style.display='block';
   player.src=URL.createObjectURL(file);
   player.volume=parseFloat(origVol.value);
   player.playbackRate=parseFloat(playRate.value);
   showErr('');
+  checkServer();
 }
 
-async function whisperTranscribe(blob,key){
+async function whisperTranscribe(blob){
   const form=new FormData();
   form.append('file',blob,'chunk.wav');
   form.append('model','whisper-1');
   form.append('response_format','verbose_json');
-  const res=await fetch('https://api.openai.com/v1/audio/transcriptions',{
-    method:'POST',headers:{'Authorization':'Bearer '+key},body:form
-  });
+  const res=await fetch(SERVER+'/whisper',{method:'POST',body:form});
   const d=await res.json();
   if(d.error) throw new Error(d.error.message);
   const segs=d.segments||[];
@@ -286,10 +275,10 @@ async function whisperTranscribe(blob,key){
   return{text:d.text||'',lang:d.language||'',noSpeech};
 }
 
-async function claudeTranslate(text,key){
-  const res=await fetch('https://api.anthropic.com/v1/messages',{
+async function claudeTranslate(text){
+  const res=await fetch(SERVER+'/translate',{
     method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    headers:{'Content-Type':'application/json'},
     body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,system:SYSTEM,messages:[{role:'user',content:text}]})
   });
   const d=await res.json();
@@ -322,10 +311,6 @@ function clearLog(){logBody.innerHTML='<div class="log-empty" id="logEmpty">ま�
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 async function startTranslation(){
-  const ok=openaiKey.value.trim();
-  const ck=claudeKey.value.trim();
-  if(!ok){showErr('OpenAI APIキーを入力してください');return;}
-  if(!ck){showErr('Anthropic APIキーを入力してください');return;}
   if(!audioFile){showErr('音声ファイルを選択してください');return;}
   showErr('');shouldStop=false;
 
@@ -342,8 +327,7 @@ async function startTranslation(){
       decodedAudio=await ac.decodeAudioData(ab);
       totalChunks=Math.ceil(decodedAudio.duration/CHUNK_SEC);
     }catch(e){
-      showErr('音声デコードエラー: '+e.message+'\n\nConsoleの詳細エラーを確認してください');
-      console.error('decodeAudioData error:', e);
+      showErr('音声デコードエラー: '+e.message);
       startBtn.style.display='flex';stopBtn.style.display='none';btnDot.style.display='none';
       setStatus('err','デコードエラー');return;
     }
@@ -355,15 +339,12 @@ async function startTranslation(){
   player.play();
 
   const sr=decodedAudio.sampleRate;
-
   for(let i=resumeChunk;i<totalChunks;i++){
     if(shouldStop){resumeChunk=i;break;}
     progFill.style.width=Math.round(i/totalChunks*100)+'%';
     progLbl.textContent=`${i+1}/${totalChunks} (${Math.floor(i*CHUNK_SEC/60)}分${(i*CHUNK_SEC)%60}秒〜)`;
 
-    const ss=i*CHUNK_SEC*sr;
-    const es=Math.min((i+1)*CHUNK_SEC*sr,decodedAudio.length);
-    const cl=es-ss;
+    const ss=i*CHUNK_SEC*sr,es=Math.min((i+1)*CHUNK_SEC*sr,decodedAudio.length),cl=es-ss;
     const oc=new OfflineAudioContext(1,cl,sr);
     const src=oc.createBufferSource();
     const cb=new AudioBuffer({numberOfChannels:1,length:cl,sampleRate:sr});
@@ -374,7 +355,7 @@ async function startTranslation(){
 
     setStatus('on',`文字起こし中 ${i+1}/${totalChunks}`);
     let result;
-    try{result=await whisperTranscribe(wav,ok);}
+    try{result=await whisperTranscribe(wav);}
     catch(e){showErr('Whisperエラー: '+e.message);break;}
 
     const{text,lang,noSpeech}=result;
@@ -384,7 +365,7 @@ async function startTranslation(){
 
     setStatus('on',`翻訳中 ${i+1}/${totalChunks}`);
     let tl;
-    try{tl=await claudeTranslate(text,ck);}
+    try{tl=await claudeTranslate(text);}
     catch(e){showErr('翻訳エラー: '+e.message);break;}
     if(!tl||shouldStop) continue;
 
@@ -397,37 +378,25 @@ async function startTranslation(){
     if(player.currentTime<chunkEnd){
       await new Promise(r=>setTimeout(r,(chunkEnd-player.currentTime)*1000/parseFloat(playRate.value)));
     }
-
     setStatus('on',`読み上げ中 ${i+1}/${totalChunks}`);
     await speak(tl);
     resumeChunk=i+1;
   }
 
   if(!shouldStop){
-    progFill.style.width='100%';
-    progLbl.textContent='完了！';
-    startLabel.textContent='通訳開始';
-    resumeChunk=0;
-    setStatus('','完了しました');
+    progFill.style.width='100%';progLbl.textContent='完了！';
+    startLabel.textContent='通訳開始';resumeChunk=0;setStatus('','完了しました');
   }
-
   player.pause();
-  startBtn.style.display='flex';
-  stopBtn.style.display='none';
-  btnDot.style.display='none';
+  startBtn.style.display='flex';stopBtn.style.display='none';btnDot.style.display='none';
 }
 
 function stopTranslation(){
-  shouldStop=true;
-  speechSynthesis.cancel();
-  player.pause();
+  shouldStop=true;speechSynthesis.cancel();player.pause();
   resumeChunk=Math.floor(player.currentTime/CHUNK_SEC);
-  startBtn.style.display='flex';
-  startLabel.textContent='▶ 続きから再開';
-  stopBtn.style.display='none';
-  btnDot.style.display='none';
-  setStatus('','停止中 — 続きから再開できます');
-  progLbl.textContent='停止しました';
+  startBtn.style.display='flex';startLabel.textContent='▶ 続きから再開';
+  stopBtn.style.display='none';btnDot.style.display='none';
+  setStatus('','停止中 — 続きから再開できます');progLbl.textContent='停止しました';
 }
 </script>
 </body>
