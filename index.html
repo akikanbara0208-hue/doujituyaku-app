@@ -24,8 +24,6 @@ input[type=range]{width:100%;margin-top:4px}
 .server-box{font-size:12px;border-radius:8px;padding:10px 12px;margin-bottom:10px}
 .server-box.ok{background:#e8f7f1;border:1px solid #b8e8d4;color:#1a7a55}
 .server-box.ng{background:#fde8e8;border:1px solid #f5b8b8;color:#a00}
-.file-select-wrap{margin-bottom:10px}
-.file-select-wrap select{font-size:13px}
 .err-box{font-size:12px;color:#a00;background:#fde8e8;border:1px solid #f5b8b8;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:none}
 .player-wrap{background:#f9f8f5;border:1px solid #e0ddd8;border-radius:10px;padding:12px;margin-bottom:10px;display:none}
 .player-time{display:flex;justify-content:space-between;font-size:11px;color:#aaa;margin-bottom:4px}
@@ -65,6 +63,7 @@ input[type=range]{width:100%;margin-top:4px}
 .sdot.on{background:#2da87a;animation:pulse 1.2s infinite}
 .sdot.err{background:#e24b4a}
 .stxt{font-size:12px;color:#aaa}
+.conv-note{font-size:11px;color:#888;margin-top:6px;display:none}
 </style>
 </head>
 <body>
@@ -108,10 +107,12 @@ input[type=range]{width:100%;margin-top:4px}
 
   <div class="card">
     <div class="card-label">音声ファイル</div>
-    <div class="file-select-wrap">
-      <select id="fileSelect" onchange="onFileSelect(this.value)">
+    <div class="vf">
+      <label>ダウンロードフォルダのファイル</label>
+      <select id="fileSelect">
         <option value="">-- ファイルを選択 --</option>
       </select>
+      <div class="conv-note" id="convNote">⏳ wav変換中...しばらくお待ちください</div>
     </div>
 
     <div class="player-wrap" id="playerWrap">
@@ -176,33 +177,31 @@ const SYSTEM = 'You are a translator. Translate English to Japanese. Return ONLY
 const HALLUCINATIONS = [
   'thank you for watching','thanks for watching','please subscribe',
   'like and subscribe','see you next time','i hope you enjoyed',
-  'hope you enjoyed','bye bye','goodbye'
+  'hope you enjoyed','bye bye'
 ];
 
-let voices=[], wavPath=null, shouldStop=false, player=null;
+let voices=[], shouldStop=false, player=null;
 let decodedAudio=null, totalChunks=0, resumeChunk=0;
 
-// サーバー確認
 async function checkServer(){
   try{
-    const r = await fetch(SERVER+'/status');
-    const d = await r.json();
+    await fetch(SERVER+'/status');
     serverBox.className='server-box ok';
-    serverBox.textContent='✓ サーバー接続済み — 使用できます';
-    await loadFileList();
+    serverBox.textContent='✓ サーバー接続済み';
+    loadFileList();
   }catch(e){
     serverBox.className='server-box ng';
     serverBox.textContent='✗ サーバー未起動 — PowerShellでserver.pyを実行してください';
-    startBtn.disabled=true;
   }
 }
 checkServer();
-setInterval(checkServer, 5000);
+setInterval(checkServer,5000);
 
 async function loadFileList(){
   try{
-    const r = await fetch(SERVER+'/audiofiles');
-    const d = await r.json();
+    const r=await fetch(SERVER+'/audiofiles');
+    const d=await r.json();
+    const cur=fileSelect.value;
     fileSelect.innerHTML='<option value="">-- ファイルを選択 --</option>';
     d.files.forEach(f=>{
       const o=document.createElement('option');
@@ -210,8 +209,55 @@ async function loadFileList(){
       o.textContent=f.name;
       fileSelect.appendChild(o);
     });
+    if(cur) fileSelect.value=cur;
   }catch(e){}
 }
+
+fileSelect.addEventListener('change', async function(){
+  const path=this.value;
+  if(!path) return;
+  decodedAudio=null;
+  resumeChunk=0;
+  startBtn.disabled=true;
+  showErr('');
+  playerWrap.style.display='none';
+  convNote.style.display='block';
+  setStatus('on','wav変換中...');
+
+  try{
+    // サーバー側でm4a→wav変換
+    const cr=await fetch(SERVER+'/convert',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path})
+    });
+    const cd=await cr.json();
+    if(cd.error) throw new Error(cd.error.message);
+
+    convNote.style.display='none';
+    setStatus('on','読み込み中...');
+
+    // サーバーからwavを取得してAudioContextでデコード
+    const wr=await fetch(SERVER+'/wavfile?path='+encodeURIComponent(cd.wav_path));
+    const ab=await wr.arrayBuffer();
+    const ac=new AudioContext();
+    decodedAudio=await ac.decodeAudioData(ab.slice(0));
+    totalChunks=Math.ceil(decodedAudio.duration/CHUNK_SEC);
+
+    // 再生用
+    player.src=URL.createObjectURL(new Blob([ab],{type:'audio/wav'}));
+    player.volume=parseFloat(origVol.value);
+    player.playbackRate=parseFloat(playRate.value);
+
+    playerWrap.style.display='block';
+    startBtn.disabled=false;
+    startLabel.textContent='通訳開始';
+    setStatus('','準備完了');
+  }catch(e){
+    convNote.style.display='none';
+    showErr('エラー: '+e.message);
+    setStatus('err','エラー');
+  }
+});
 
 window.addEventListener('load',()=>{
   const ov=localStorage.getItem('orig_vol');
@@ -224,52 +270,6 @@ window.addEventListener('load',()=>{
   player.addEventListener('timeupdate',()=>{seekBar.value=player.currentTime;curTime.textContent=fmt(player.currentTime);});
   player.addEventListener('loadedmetadata',()=>{seekBar.max=player.duration;durTime.textContent=fmt(player.duration);});
 });
-
-async function onFileSelect(path){
-  if(!path) return;
-  wavPath=null;
-  decodedAudio=null;
-  resumeChunk=0;
-  startBtn.disabled=true;
-  showErr('');
-  playerWrap.style.display='none';
-  setStatus('on','変換中...');
-  try{
-    const r=await fetch(SERVER+'/convert',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({path})
-    });
-    const d=await r.json();
-    if(d.error) throw new Error(d.error.message);
-    wavPath=d.wav_path;
-    // wavをAudioContextでデコード
-    const ab=await fetch('file:///'+wavPath.replace(/\\/g,'/')).catch(()=>null);
-    // file://は使えないのでサーバー経由で読む
-    // wavパスをサーバーに渡して再生用URLを取得
-    player.src='file:///'+wavPath.replace(/\\/g,'/');
-    playerWrap.style.display='block';
-    startBtn.disabled=false;
-    startLabel.textContent='通訳開始';
-    setStatus('','変換完了 — 通訳を開始できます');
-    // AudioContextでデコード
-    await decodeWav(wavPath);
-  }catch(e){
-    showErr('エラー: '+e.message);
-    setStatus('err','エラー');
-  }
-}
-
-async function decodeWav(wavPath){
-  // サーバーからwavを読み込む
-  const r=await fetch(SERVER+'/wavfile?path='+encodeURIComponent(wavPath));
-  const ab=await r.arrayBuffer();
-  const ac=new AudioContext();
-  decodedAudio=await ac.decodeAudioData(ab);
-  totalChunks=Math.ceil(decodedAudio.duration/CHUNK_SEC);
-  player.src=URL.createObjectURL(new Blob([ab],{type:'audio/wav'}));
-  seekBar.max=decodedAudio.duration;
-  durTime.textContent=fmt(decodedAudio.duration);
-}
 
 function fmt(s){return Math.floor(s/60)+':'+(Math.floor(s%60)).toString().padStart(2,'0');}
 function onSeek(v){if(player){player.currentTime=parseFloat(v);resumeChunk=Math.floor(parseFloat(v)/CHUNK_SEC);}}
@@ -397,7 +397,7 @@ async function startTranslation(){
     if(!text.trim()||shouldStop) continue;
     if(noSpeech>0.95) continue;
     if(lang!=='english') continue;
-    if(isHallucination(text)) continue;
+    if(isHallucination(text)){console.log('幻覚スキップ:',text);continue;}
 
     setStatus('on',`翻訳中 ${i+1}/${totalChunks}`);
     let tl;
